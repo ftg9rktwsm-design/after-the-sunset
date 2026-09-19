@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日落之后 · AFTER THE SUNSET</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#1a1420;
+    font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  #c3d{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+
+  /* 后期：暗角 + 颗粒（CSS 层，不进 3D 管线） */
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse at 50% 46%, transparent 58%, rgba(30,16,32,.42) 100%);}
+  #grain{position:fixed;inset:-50%;width:200%;height:200%;pointer-events:none;z-index:6;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E");
+    animation:grain 0.9s steps(4) infinite;}
+  @keyframes grain{0%{transform:translate(0,0)}25%{transform:translate(-2%,1.4%)}
+    50%{transform:translate(1.6%,-1%)}75%{transform:translate(-1%,-1.8%)}100%{transform:translate(0,0)}}
+
+  #titleBar{position:fixed;top:26px;left:0;right:0;text-align:center;pointer-events:none;z-index:10}
+  #titleBar h1{font-size:clamp(26px,4vw,44px);font-weight:800;letter-spacing:.35em;text-indent:.35em;
+    color:#fff7ee;
+    text-shadow:0 2px 0 rgba(201,110,90,.55), 0 0 26px rgba(255,190,130,.55), 0 6px 30px rgba(80,40,60,.45);}
+  #titleBar p{margin-top:8px;font-size:14px;letter-spacing:.5em;text-indent:.5em;color:#fff3e2;
+    text-shadow:0 1px 8px rgba(90,40,50,.6);opacity:.9}
+
+  #startOverlay{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:20px;
+    background:radial-gradient(120% 100% at 50% 110%, rgba(245,198,165,.28), rgba(26,20,32,.92) 70%);
+    transition:opacity .8s;}
+  #startOverlay.hide{opacity:0;pointer-events:none}
+  #startOverlay h1{font-size:clamp(34px,6vw,64px);font-weight:800;letter-spacing:.3em;text-indent:.3em;
+    color:#fff7ee;
+    text-shadow:0 3px 0 rgba(201,110,90,.6), 0 0 34px rgba(255,190,130,.6), 0 10px 44px rgba(30,15,30,.7);}
+  #startOverlay .sub{font-size:16px;letter-spacing:.6em;text-indent:.6em;color:#f6e3cf;opacity:.95}
+  #startOverlay .rules{display:flex;flex-direction:column;gap:9px;text-align:center}
+  #startOverlay .rules span{color:#f9ecd9;font-size:15px;letter-spacing:.12em;opacity:.92}
+  #startOverlay .rules em{color:#ffd9a8;font-style:normal;font-weight:700}
+  #loadLine{color:#ffd9a8;font-size:14px;letter-spacing:.15em;min-height:20px}
+  .btnRow{display:flex;gap:18px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+  .bigBtn{border:none;border-radius:999px;padding:16px 34px;font-size:17px;font-weight:700;
+    letter-spacing:.1em;cursor:pointer;transition:transform .15s;font-family:inherit}
+  .bigBtn:hover{transform:translateY(-2px) scale(1.03)}
+  .bigBtn:disabled{opacity:.55;cursor:wait;transform:none}
+  #btnCam{background:linear-gradient(135deg,#ffd9a8,#ff9e7d);color:#4a2318;
+    box-shadow:0 6px 26px rgba(255,150,110,.45)}
+  #btnMouse{background:rgba(255,247,238,.12);color:#fff3e2;border:1px solid rgba(255,247,238,.4)}
+  #startOverlay .tiny{font-size:12px;color:#e8d5c2;opacity:.65;letter-spacing:.08em;line-height:1.8;text-align:center}
+
+  #previewWrap{position:fixed;left:18px;bottom:18px;z-index:20;border-radius:14px;overflow:hidden;
+    border:1px solid rgba(255,240,220,.35);box-shadow:0 8px 30px rgba(20,10,25,.5);
+    opacity:.92;transition:opacity .5s}
+  #previewWrap.hide{opacity:0;pointer-events:none}
+  #preview{display:block;width:200px;height:150px;background:#111}
+  #hud{position:fixed;right:18px;bottom:18px;z-index:20;text-align:right;user-select:none}
+  #status{color:#fff3e2;font-size:12.5px;letter-spacing:.08em;opacity:.85;
+    text-shadow:0 1px 6px rgba(20,10,25,.8);line-height:1.9}
+  #blinkTag{display:inline-block;margin-top:6px;padding:4px 12px;border-radius:999px;
+    background:rgba(255,240,220,.14);border:1px solid rgba(255,240,220,.3);
+    color:#ffe9cf;font-size:12px;letter-spacing:.1em;transition:background .3s,color .3s}
+  #blinkTag.undo{background:rgba(185,167,216,.55);color:#fff}
+  #speedWrap{width:120px;height:5px;border-radius:3px;background:rgba(255,247,238,.18);
+    margin:8px 0 0 auto;overflow:hidden}
+  #speedFill{height:100%;width:30%;border-radius:3px;
+    background:linear-gradient(90deg,#ffd9a8,#ff9e7d);transition:width .12s}
+  #drowWrap{width:120px;height:5px;border-radius:3px;background:rgba(255,247,238,.12);
+    margin:5px 0 0 auto;overflow:hidden}
+  #drowFill{height:100%;width:0%;border-radius:3px;
+    background:linear-gradient(90deg,#b9a7d8,#8d7bc0);transition:width .3s}
+  #soundBtn{position:fixed;right:18px;top:18px;z-index:20;width:42px;height:42px;border-radius:50%;
+    border:1px solid rgba(255,240,220,.35);background:rgba(30,18,30,.35);color:#fff3e2;
+    font-size:17px;cursor:pointer}
+  #boostTag{position:fixed;left:50%;bottom:12%;transform:translateX(-50%);z-index:15;
+    font-size:22px;font-weight:800;letter-spacing:.5em;text-indent:.5em;color:#fff0d8;
+    text-shadow:0 0 18px rgba(255,170,110,.8);opacity:0;pointer-events:none;transition:opacity .2s}
+  #caption{position:fixed;left:50%;bottom:7%;transform:translateX(-50%);z-index:15;
+    padding:10px 26px;border-radius:999px;background:rgba(30,16,28,.45);border:1px solid rgba(255,240,220,.25);
+    color:#ffeccc;font-size:15px;letter-spacing:.3em;text-indent:.3em;opacity:0;transition:opacity 1s;pointer-events:none}
+  #caption.show{opacity:1}
+  #wrapFade{position:fixed;inset:0;z-index:25;background:#1a1420;opacity:0;pointer-events:none;transition:opacity .25s}
+  #dreamFrame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:50;opacity:0;pointer-events:none;transition:opacity 1.2s;background:#04060d}
+  #dreamFrame.on{opacity:1;pointer-events:auto}
+  #actHint{position:fixed;bottom:34px;left:0;right:0;text-align:center;z-index:26;pointer-events:none;
+    font-size:15px;letter-spacing:.26em;color:#ffe9c9;text-shadow:0 1px 14px rgba(60,30,20,.85);
+    opacity:0;transition:opacity .8s}
+  #actHint.show{opacity:.94}
+  #lidTop,#lidBottom{position:fixed;left:-14%;right:-14%;height:0;background:#04060d;z-index:55;pointer-events:none;filter:blur(46px);transition:none}
+  #lidTop{top:-70px;border-radius:0 0 50% 50%/0 0 100% 100%}
+  #lidBottom{bottom:-70px;border-radius:50% 50% 0 0/100% 100% 0 0}
+  #dreamEpilogue{position:fixed;inset:0;z-index:62;background:#02040a;opacity:0;pointer-events:none;transition:opacity 2s;
+   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px}
+  #dreamEpilogue.on{opacity:1}
+  #dreamEpilogue p{margin:0;font-family:Georgia,'Songti SC','STSong',serif;color:#e8e2d0;font-size:20px;letter-spacing:.3em;text-indent:.3em;opacity:0;transition:opacity 2.4s}
+  #dreamEpilogue p.on{opacity:.94}
+  #dreamEpilogue p.sig{font-size:14px;color:#c9b98a;letter-spacing:.42em;margin-top:10px}
+  #lidTop{top:0;border-radius:0 0 50% 50%/0 0 100% 100%}
+  #lidBottom{bottom:0;border-radius:50% 50% 0 0/100% 100% 0 0}
+  #toast{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:40;
+    padding:10px 22px;border-radius:12px;background:rgba(30,16,28,.78);color:#ffeccc;
+    font-size:14px;letter-spacing:.06em;opacity:0;transition:opacity .4s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.show{opacity:1}
+  #fatal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    color:#ffd9c9;font-size:15px;background:rgba(20,10,20,.92);text-align:center;line-height:2;padding:20px}
+  .hidden-src{position:fixed;left:-9999px;top:0;width:640px;height:480px}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+<div id="vig"></div><div id="grain"></div>
+
+<div id="titleBar">
+  <h1>日落之后</h1>
+  <p>风车农场 · 第一幕 清醒 —— 向前跑</p>
+</div>
+
+<div id="startOverlay">
+  <h1>日落之后</h1>
+  <div class="sub">AFTER THE SUNSET · ACT 1</div>
+  <div class="rules">
+    <span><em>左右移动掌心</em> —— 转向</span>
+    <span><em>朝镜头方向推掌</em> —— 向前加速奔跑</span>
+    <span>你的每一次眨眼，都会让世界更模糊、更慢</span>
+    <span><em>握拳</em>可以甩掉一格困意 —— 但最多三次</span>
+  </div>
+  <div id="loadLine">正在加载模型…</div>
+  <div class="btnRow">
+    <button class="bigBtn" id="btnCam" disabled>✋ 开启摄像头开始</button>
+    <button class="bigBtn" id="btnMouse" disabled>🖱 无摄像头 · 鼠标模式</button>
+  </div>
+  <div class="tiny">摄像头画面只在本地处理，不上传任何数据 · 模型 157MB 走本地加载，几秒钟</div>
+</div>
+
+<div id="previewWrap" class="hide"><canvas id="preview" width="320" height="240"></canvas></div>
+
+<div id="hud">
+  <div id="status">模式 等待开始</div>
+  <div id="blinkTag">眨眼 × 0</div>
+  <div id="speedWrap"><div id="speedFill"></div></div>
+  <div id="drowWrap" title="困意"><div id="drowFill"></div></div>
+</div>
+
+<button id="soundBtn" title="音乐开关">🔊</button>
+<div id="boostTag">跑 ——</div>
+<div id="caption"></div>
+<div id="wrapFade"></div>
+<div id="actHint"></div>
+<iframe id="dreamFrame" title="入梦" allow="camera"></iframe>
+<div id="lidTop"></div><div id="lidBottom"></div>
+<div id="dreamEpilogue"><p>你从星河里摘下的光，</p><p>会留在梦里，替你亮着。</p><p class="sig">—— 日落之后 · 晚安 ——</p></div>
+<div id="toast"></div>
+<div id="fatal"></div>
+<video id="cam" class="hidden-src" playsinline muted></video>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+window.__errs=[]; window.addEventListener('error',e=>{window.__errs.push(String(e.message||e));});
+const $=id=>document.getElementById(id);
+const fatal=msg=>{const f=$('fatal');f.style.display='flex';f.innerHTML=msg;};
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+
+/* ================= 可调参数（模型尺度：1 单位 = 1 米） ================= */
+const CFG={
+  EYE_H:2.2,           // 人眼高度（米）
+  START:-1500, END:5200,   // 沿田野长轴（Z）的奔跑区间
+  PATH_X:-3300,        // 跑道横向位置（田野中央，两侧都有风机排）
+  CRUISE:45,           // 起跑初速 m/s（高速掠过风机）
+  PUSH_MAX:20,         // 推掌附加速度 m/s
+  STEER_YAW:0.45,      // 转向最大偏航（弧度）
+  STRAFE:160,          // 转向横向偏移幅度（米）
+  STEER_DEAD:0.05,
+  HAND_LOST_GRACE:0.8,
+  FOG_NEAR:250, FOG_FAR:7000,
+  BLINKS_MAX:6,        // 达到最大困意的眨眼次数（第二幕阶梯）
+  DELAY_MAX:0.45,      // 困意满时的输入延迟（秒）
+  BGM_VOL:0.5,         // 背景音乐初始音量
+};
+const MODEL_URL=encodeURI((location.pathname.replace(/[^/]*$/,'').includes('/act1/')?'/act1/models/':'/models/')+'已加速- Wind Turbine Farm.glb');
+/* ======================================================================= */
+
+/* ---------------- 渲染器 / 场景 ---------------- */
+const canvas=$('c3d');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,logarithmicDepthBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.12;
+function resize(){
+  renderer.setSize(innerWidth,innerHeight,false);
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  composer.setSize(innerWidth,innerHeight);
+  napPass.uniforms.uRes.value.set(canvas.width,canvas.height);
+}
+
+const scene=new THREE.Scene();
+const HAZE=new THREE.Color(0xf2c19b);
+scene.fog=new THREE.Fog(HAZE,CFG.FOG_NEAR,CFG.FOG_FAR);
+const camera=new THREE.PerspectiveCamera(62,1,2,500000);
+addEventListener('resize',resize);
+
+/* 后期：困意后期（焦点圈收缩 → 失焦模糊 / 褪色 / 眼睑合拢）——由平滑后的眨眼进度驱动 */
+const composer=new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene,camera));
+const napPass=new ShaderPass({
+  uniforms:{
+    tDiffuse:{value:null},
+    uProg:{value:0},   // 0..1 困意视觉进度（已平滑）
+    uRes:{value:new THREE.Vector2(1,1)},
+  },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse; uniform float uProg; uniform vec2 uRes; varying vec2 vUv;
+    void main(){
+      // 焦点圈：清醒=全画面清晰；困意加深=清晰范围从中心收缩，四周渐渐失焦
+      float blurR=mix(2.0,15.0,uProg);
+      vec2 px=blurR/uRes;
+      vec3 sharp=texture2D(tDiffuse,vUv).rgb;
+      vec3 sum=sharp;
+      for(int i=1;i<=16;i++){
+        float fi=float(i);
+        float a=fi*2.39996323;
+        vec2 off=vec2(cos(a),sin(a))*sqrt(fi/16.0)*px;
+        sum+=texture2D(tDiffuse,vUv+off).rgb;
+      }
+      vec3 blurred=sum/17.0;
+      vec2 cc=(vUv-0.5)*vec2(uRes.x/uRes.y,1.0);
+      float rr=length(cc);
+      float centerR=mix(1.25,0.0,uProg);
+      float focus=smoothstep(centerR,centerR+0.45,rr);
+      vec3 col=mix(sharp,blurred,focus);
+      // 褪色
+      float lum=dot(col,vec3(0.299,0.587,0.114));
+      col=mix(vec3(lum),col,1.0-uProg*0.55);
+      // 眼睑：宽羽化的弧形软边
+      float lid=uProg*0.42;
+      float curve=sin(vUv.x*3.14159)*0.10*lid;
+      float top=1.0-lid-curve;
+      float bot=lid*0.80+curve;
+      float mTop=smoothstep(top-0.10,top+0.03,vUv.y);
+      float mBot=1.0-smoothstep(bot-0.03,bot+0.10,vUv.y);
+      col*=1.0-clamp(mTop+mBot,0.0,1.0)*0.97;
+      col*=1.0-lid*0.12;
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+composer.addPass(napPass);
+napPass.uniforms.uRes.value.set(innerWidth,innerHeight);
+addEventListener('resize',resize);
+
+/* 天穹：黄昏渐变 + 落日辉光（跟随相机） */
+const sunDir=new THREE.Vector3(0.18,0.10,1).normalize(); // 迎着落日跑
+const sky=new THREE.Mesh(
+  new THREE.SphereGeometry(380000,32,20),
+  new THREE.ShaderMaterial({
+    side:THREE.BackSide,depthWrite:false,fog:false,
+    uniforms:{uSun:{value:sunDir}},
+    vertexShader:`varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.)).xyz;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec3 vW; uniform vec3 uSun;
+      void main(){
+        vec3 d=normalize(vW - cameraPosition);
+        float h=d.y;
+        vec3 c=mix(vec3(0.99,0.78,0.58), vec3(0.86,0.62,0.72), smoothstep(0.02,0.26,h));
+        c=mix(c, vec3(0.52,0.60,0.75), smoothstep(0.22,0.72,h));
+        if(h<0.0) c=vec3(0.93,0.72,0.55);
+        float sd=max(dot(d,uSun),0.0);
+        float dim=mix(1.0,0.35,smoothstep(0.02,-0.04,uSun.y));
+        c+=vec3(1.0,0.76,0.45)*pow(sd,50.0)*0.85*dim;
+        c+=vec3(1.0,0.92,0.72)*smoothstep(0.99955,0.99985,sd)*1.4*dim;
+        gl_FragColor=vec4(c,1.0);
+      }`
+  }));
+scene.add(sky);
+
+/* 灯光：低角度暖阳 + 天光 */
+const sun=new THREE.DirectionalLight(0xffb877,2.2);
+sun.position.copy(sunDir).multiplyScalar(100000);
+scene.add(sun);
+const hemi=new THREE.HemisphereLight(0xf6cdb2,0x6b6f4a,1.25);scene.add(hemi);
+scene.add(new THREE.AmbientLight(0xffe0c4,0.42));
+
+/* ---------------- 加载模型 ---------------- */
+let fins=null;           // 原始叶片节点
+const rotors=[];         // 农场里所有会转的叶片（含克隆）
+const V={prog:0};        // 困意的视觉平滑值（慢于真实值，保证合眼特效顺畅）
+const loadLine=$('loadLine');
+new GLTFLoader().load(MODEL_URL, gltf=>{
+  // 模型自带的"体积雾"大盒子会糊死视野，隐藏之——雾由场景 Fog 负责
+  const fogNode=gltf.scene.getObjectByName('Fog'); if(fogNode) fogNode.visible=false;
+  let turbine=null;
+  // 注意：gltf.scene 名字是 "Wind Turbine Farm"，必须排除根节点、只认 Mesh
+  gltf.scene.traverse(o=>{ if(!turbine&&o!==gltf.scene&&o.isMesh&&/turbine|windmill/i.test(o.name||'')) turbine=o; });
+  fins=gltf.scene.getObjectByName('Fins')||null;
+  const clouds=gltf.scene.getObjectByName('Clouds');
+
+  /* ---- 场景归一化（按导出实测常量写死） ----
+     这份模型内部不统一：地面/山/云的顶点 author 在 y≈626 高度，
+     风机和叶片却 author 在 y≈0 高度（且风机节点又下沉 335.1）——所以它看起来"埋"在地下。
+     实测：塔高≈206m，转子半径≈52m，地面顶点 626.2±1.4。 */
+  gltf.scene.position.y = 0;               // 根节点保持加载器自带的 +626.19（Field 顶点以它为基准≈0.2）
+  if(turbine) turbine.position.y = 0.5;    // 风机顶点 0..205（0 基准）：塔基落地、塔顶≈205.5
+  if(fins)    fins.position.y    = 228.7;  // 轮毂世界高≈246（塔顶+40）
+  if(clouds)  clouds.position.y  = 8426;   // 云底抬到 ≥800
+
+  /* ---- 克隆风机组成农场（参考图：近景一对大门 + 两侧主列 + 远景渐入雾中） ----
+     以归一化后的原始风机为模板，共享几何与材质，只改位置/缩放/相位 */
+  rotors.length=0; rotors.push(fins);
+  const ox=turbine.position.x, oz=turbine.position.z;
+  const fx=fins.position.x-ox, fz=fins.position.z-oz;   // 叶片相对塔的偏移
+  const layout=[
+    {x:CFG.PATH_X-330, z:CFG.START+420, s:1.06},   // 起跑大门（左）
+    {x:CFG.PATH_X+360, z:CFG.START+560, s:1.0},    // 起跑大门（右）
+  ];
+  for(let z=CFG.START+1350; z<CFG.END-300; z+=520)
+    layout.push({x:CFG.PATH_X-430, z, s:1}, {x:CFG.PATH_X+470, z:z+260, s:0.97});
+  for(let z=CFG.START+1750; z<CFG.END-700; z+=1050)
+    layout.push({x:CFG.PATH_X-1250, z, s:0.94}, {x:CFG.PATH_X+1360, z:z+520, s:0.92});
+  for(let z=CFG.START+2100; z<CFG.END-900; z+=2100)
+    layout.push({x:CFG.PATH_X-2650, z, s:0.9}, {x:CFG.PATH_X+2760, z:z+1000, s:0.88});
+  // 第一个槽位由原始本体担任
+  const first=layout.shift();
+  turbine.position.x=first.x; turbine.position.z=first.z;
+  fins.position.x=first.x+fx; fins.position.z=first.z+fz;
+  fins.rotation.x=Math.random()*6.28;
+  for(const m of layout){
+    const tc=turbine.clone(); tc.position.set(m.x, turbine.position.y, m.z); tc.scale.setScalar(m.s);
+    const fc=fins.clone(); fc.position.set(m.x+fx*m.s, 228.7*m.s, m.z+fz*m.s); fc.scale.setScalar(m.s);
+    fc.rotation.x=Math.random()*6.28;
+    scene.add(tc); scene.add(fc); rotors.push(fc);
+  }
+
+  /* ---- 干草垛撒一地（同款克隆散布） ---- */
+  const hay=gltf.scene.getObjectByName('Hay_Bale');
+  if(hay){
+    const hb=new THREE.Box3().setFromObject(hay);
+    const lift=0.2-hb.min.y, haySize=hb.getSize(new THREE.Vector3());
+    hay.position.y+=lift;
+    const hayBase=Math.max(haySize.x,0.001);
+    const rng=(a,b)=>a+Math.random()*(b-a);
+    for(let i=0;i<26;i++){
+      const h=hay.clone();
+      const side=Math.random()<0.5?-1:1;
+      h.position.set(CFG.PATH_X+side*rng(180,2700), hay.position.y, rng(CFG.START,CFG.END-100));
+      h.rotation.y=Math.random()*6.28;
+      h.scale.multiplyScalar(rng(1.5,4.5)/hayBase);
+      scene.add(h);
+    }
+  }
+
+  scene.add(gltf.scene);
+  window.__scene=gltf.scene; window.__cam=camera; window.__THREE=THREE; // 调试用
+  S.ready=true;
+  loadLine.textContent='模型就绪 ✦ 选择一种方式开始';
+  $('btnCam').disabled=false; $('btnMouse').disabled=false;
+}, ev=>{
+  if(ev.lengthComputable) loadLine.textContent=`正在加载模型 ${Math.round(ev.loaded/ev.total*100)}% …`;
+  else loadLine.textContent=`已加载 ${(ev.loaded/1048576).toFixed(0)}MB …`;
+}, err=>{ window.__errs.push('load: '+err); fatal('模型加载失败：'+err); });
+
+/* ---------------- 状态 ---------------- */
+const S={
+  mode:'idle', started:false, ready:false,
+  travel:0, speed:CFG.CRUISE, boostKick:0, throttle:0, tThrottle:0,
+  steer:{x:0,y:0}, tSteer:{x:0,y:0},
+  blinks:0, blinkValue:0,
+  hand:{present:false,lastSeen:-9,size:0,base:0.2,prevSize:0},
+  mouse:{down:false},
+  camOn:false,
+};
+window.__state=S;
+function toast(msg,ms=2600){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),ms);
+}
+function showCaption(txt,ms=3600){
+  const c=$('caption'); c.textContent=txt; c.classList.add('show');
+  clearTimeout(c._h); c._h=setTimeout(()=>c.classList.remove('show'),ms);
+}
+
+/* ---------------- MediaPipe（本地离线包优先，CDN 兜底，失败自动重试） ---------------- */
+const video=$('cam');
+let handLM=null, faceLM=null, mpReady=false, lastVideoTime=-1, mpFailStreak=0;
+const MP_CDN='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+/* 严格单调时间戳：系统时钟回拨/同毫秒重复都会让 MediaPipe 识别图崩溃，这里保证永不回退 */
+let mpTs=0;
+function mpNow(){ mpTs=Math.max(mpTs+1,Math.round(performance.now())); return mpTs; }
+const MP_SOURCES=[
+ {lib:'./mp-local/vision_bundle.mjs', wasm:'mp-local/wasm', hand:'mp-local/hand_landmarker.task', face:'mp-local/face_landmarker.task'},
+ {lib:MP_CDN+'/vision_bundle.mjs', wasm:MP_CDN+'/wasm',
+  hand:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+  face:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'}
+];
+let mpLoading=false;
+async function buildLM(vision,src){
+  const fs=await vision.FilesetResolver.forVisionTasks(src.wasm);
+  try{ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.hand,delegate:'GPU'},runningMode:'VIDEO',numHands:2}); }
+  catch(e){ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.hand,delegate:'CPU'},runningMode:'VIDEO',numHands:2}); }
+  try{ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.face,delegate:'GPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); }
+  catch(e){ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.face,delegate:'CPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); }
+}
+async function initModels(attempt){
+  attempt=attempt||0;
+  if(mpReady||mpLoading)return; mpLoading=true;
+  try{
+    let lastErr=null;
+    for(const src of MP_SOURCES){ try{ const vision=await import(src.lib); await buildLM(vision,src); lastErr=null; break; }catch(e){ lastErr=e; } }
+    if(lastErr) throw lastErr;
+    mpReady=true; mpFailStreak=0;
+    if(S.started) toast('手势与眨眼识别已就绪 ✋');
+  }catch(e){
+    window.__errs.push('mp: '+e);
+    if(attempt<2){ if(S.started) toast('识别模型加载失败，正在重试…',2500); mpLoading=false; setTimeout(()=>initModels(attempt+1),2500*(attempt+1)); return; }
+    if(S.started) toast('识别模型加载失败：请检查网络后刷新页面',4200);
+  }
+  mpLoading=false;
+}
+function camHint(e){
+  const n=(e&&e.name)||'';
+  if(n==='NotAllowedError') return '摄像头权限被拒：系统设置→隐私与安全性→摄像头 允许 Safari；Safari→设置→网站→摄像头 允许 localhost';
+  if(n==='NotReadableError'||n==='AbortError') return '摄像头被其他应用占用：请关闭微信视频/会议/监考类应用后重试';
+  if(n==='NotFoundError') return '未检测到摄像头设备';
+  return (e&&e.message)||n||'未知错误';
+}
+initModels();
+
+async function startCamera(){
+  const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
+  video.srcObject=stream; await video.play(); S.camOn=true;
+}
+const blink={closedFrames:0,wasClosed:false,lastTime:-1e9};
+function detectBlink(res,nowMs){
+  if(!res||!res.faceBlendshapes||!res.faceBlendshapes.length) return;
+  const cats=res.faceBlendshapes[0].categories;
+  let bl=0,n=0;
+  for(const c of cats){ if(c.categoryName==='eyeBlinkLeft'||c.categoryName==='eyeBlinkRight'){bl+=c.score;n++;} }
+  if(!n) return; bl/=n; S.blinkValue=bl;
+  const closed=bl>0.5;
+  if(closed){ blink.closedFrames++; blink.wasClosed=true; }
+  else if(blink.wasClosed){
+    if(blink.closedFrames>=2 && nowMs-blink.lastTime>200){ S.blinks++; blink.lastTime=nowMs; }
+    blink.wasClosed=false; blink.closedFrames=0;
+  }
+}
+const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function palmOf(lm){ let x=0,y=0; for(const i of [0,5,9,13,17]){x+=lm[i].x;y+=lm[i].y;} return {x:x/5,y:y/5}; }
+
+/* 握拳状态机：指尖收拢 <0.42 进入，握住 0.7s 触发一次回退，张开 >0.55 才能再次触发 */
+const fist={state:'open',hold:0,uses:0,coolAt:-9,spread:1};
+window.fist=fist;   // 调试/测试用
+function fistUpdate(spread,dt,nowS){
+  fist.spread=spread;
+  if(fist.state==='open'){
+    if(spread<0.42){ fist.state='fist'; fist.hold=0; }
+  }else if(fist.state==='fist'){
+    if(spread>0.55){ fist.state='open'; fist.hold=0; return; }
+    fist.hold+=dt;
+    if(fist.hold>0.7){
+      if(S.blinks>0&&fist.uses<3){
+        S.blinks--; fist.uses++;
+        $('blinkTag').classList.add('undo');
+        setTimeout(()=>$('blinkTag').classList.remove('undo'),700);
+      }
+      fist.state='cool'; fist.coolAt=nowS;
+    }
+  }else if(fist.state==='cool'){
+    if(spread>0.55&&nowS-fist.coolAt>0.5) fist.state='open';
+  }
+}
+function handInput(L,dt,now){
+  let best=null,bs=-1;
+  for(const lm of L){ const d=Math.hypot(lm[0].x-lm[9].x,lm[0].y-lm[9].y); if(d>bs){bs=d;best=lm;} }
+  S.hand.lastSeen=now; S.hand.size=bs;
+  S.hand.base+=(bs-S.hand.base)*Math.min(1,dt*0.12);
+  const ratio=bs/Math.max(S.hand.base,1e-4);
+  S.tThrottle=clamp((ratio-1.05)*2.6,0,1);
+  const rate=(bs-S.hand.prevSize)/Math.max(dt,1e-3); S.hand.prevSize=bs;
+  if(rate>0.25) S.boostKick=Math.min(3.2,S.boostKick+(rate-0.25)*2.5);
+  const p=palmOf(best);
+  // 握拳检测：指尖到掌心的平均距离 / 手掌尺寸（张开≈1.0+，握拳≈0.3-0.5）
+  let sp=0; for(const i of [8,12,16,20]) sp+=Math.hypot(best[i].x-p.x, best[i].y-p.y);
+  fistUpdate(sp/4/Math.max(bs,1e-4), dt, now);
+  const mx=clamp((0.5-p.x)*2.4,-1,1), my=clamp((0.5-p.y)*2.2,-1,1);
+  S.tSteer.x=Math.abs(mx)<CFG.STEER_DEAD?0:mx;
+  S.tSteer.y=Math.abs(my)<CFG.STEER_DEAD?0:my*0.7;
+  S.hand.present=true;
+  // 手掌移动速度（供"五指张开静止"的入梦判定）
+  if(S.hand.px!==undefined){
+    const v=Math.hypot(p.x-S.hand.px,p.y-S.hand.py)/Math.max(dt,1e-3);
+    S.hand.still=S.hand.still===undefined?v:S.hand.still*0.85+v*0.15;
+  }
+  S.hand.px=p.x; S.hand.py=p.y;
+}
+
+/* ---------------- 鼠标 / 键盘 ---------------- */
+addEventListener('mousemove',e=>{
+  if(S.mode!=='mouse') return;
+  const nx=(e.clientX/innerWidth)*2-1, ny=(0.5-e.clientY/innerHeight)*2;
+  S.tSteer.x=Math.abs(nx)<CFG.STEER_DEAD?0:nx;
+  S.tSteer.y=Math.abs(ny)<CFG.STEER_DEAD?0:ny*0.6;
+});
+addEventListener('mousedown',()=>{ if(S.mode==='mouse') S.mouse.down=true; });
+addEventListener('mouseup',()=>{ S.mouse.down=false; });
+addEventListener('keydown',e=>{
+  if(e.code==='Space'&&S.mode==='mouse'){ S.mouse.down=true; e.preventDefault(); }
+  if(e.code==='KeyB') S.blinks++;
+  if(e.code==='KeyF'&&fist.uses<3&&S.blinks>0){ S.blinks--; fist.uses++; }   // 模拟握拳回退
+  if(e.code==='KeyD'&&V.prog>0.5) enterDream();                              // 模拟入梦（测试）
+  if(e.code==='KeyE') showDreamFrame('reentry');   // 模拟惊醒后立刻合眼（测试）
+});
+addEventListener('keyup',e=>{ if(e.code==='Space') S.mouse.down=false; });
+
+/* ---------------- 入梦 → 梦境层（同页 iframe，第二幕状态原地保留） ---------------- */
+function enterDream(){
+  if(S.dream) return;
+  S.dream=true;
+  showCaption('—— 入梦 ——',12000);
+  stopBGM();   // 五指张开、梦境开启：音乐止
+  // 眨眼特效收尾：把第一幕的失焦/褪色/眼睑合拢顺势推到全黑（同一种特效，不换语言）
+  const cvs=renderer.domElement,t0=performance.now(),lt=$('lidTop'),lb=$('lidBottom');
+  lt.style.transition='none';lb.style.transition='none';
+  (function closeEyes(){
+    const p=Math.min(1,(performance.now()-t0)/1500);
+    cvs.style.filter=`blur(${15+p*20}px) saturate(${Math.max(0,.45-p*.35)}) brightness(${1-p*.66})`;
+    const lid=0.42+p*0.34,curve=0.10*lid;
+    lt.style.height=(lid+curve)*100+'%';
+    lb.style.height=(lid*0.8+curve)*100+'%';
+    if(p<1) setTimeout(closeEyes,33);   // 时间驱动：遮挡/节流时转场也能完成
+    else setTimeout(()=>showDreamFrame('entry'),380);   // 全黑 → 睁眼已在梦中
+  })();
+}
+function showDreamFrame(kind){
+  (window.__wakeLog=window.__wakeLog||[]).push('show:'+kind+'@'+Math.round(performance.now()));
+  S.dream=true;                               // 梦境层接管：风车世界暂停
+  startDreamBGM();                            // 《星波随梦流》——父页面带着用户手势，必定有声
+  const f=$('dreamFrame');
+  f.src='dream/index.html?'+kind+'=1&mode='+S.mode;
+  f.classList.add('on');
+  // 闭着眼等梦就绪（共享第一幕摄像头流，免二次授权）→ 睁眼已在梦中
+  let tries=0,shared=false;
+  const iv=setInterval(()=>{
+    tries++;
+    try{ if(!shared&&S.camOn&&video.srcObject&&f.contentWindow.__attachStream){ f.contentWindow.__attachStream(video.srcObject); shared=true; } }catch(e){}
+    let ok=false;
+    try{ok=f.contentWindow.__dream&&f.contentWindow.__dream.started;}catch(e){ok=false;}
+    if(ok||tries>60){
+      clearInterval(iv);
+      requestAnimationFrame(()=>{
+        const lt=$('lidTop'),lb=$('lidBottom'),cvs=renderer.domElement;
+        lt.style.transition='height 1.9s cubic-bezier(.4,0,.3,1)';
+        lb.style.transition='height 1.9s cubic-bezier(.4,0,.3,1)';
+        cvs.style.transition='filter 1.9s cubic-bezier(.4,0,.3,1)';
+        lt.style.height='0%';lb.style.height='0%';
+        cvs.style.filter='blur(0px) saturate(1) brightness(1)';
+        setTimeout(()=>{cvs.style.filter='none';cvs.style.transition='';},2200);
+      });
+    }
+  },120);
+}
+function hideDreamWake(){
+  (window.__wakeLog=window.__wakeLog||[]).push('hide@'+Math.round(performance.now())+' stack:'+new Error().stack.split('\n')[2].trim().slice(0,80));
+  S.dream=false;                              // 风车世界在黑幕后恢复运转
+  stopDreamBGM();                             // 梦境音乐淡出：梦里的事留在梦里
+  const f=$('dreamFrame'); f.classList.remove('on');
+  const lt=$('lidTop'),lb=$('lidBottom'),cvs=renderer.domElement;
+  lt.style.transition='none';lb.style.transition='none';lt.style.height='0%';lb.style.height='0%';
+  cvs.style.filter='none';cvs.style.transition='';
+  setTimeout(()=>{ if(!f.classList.contains('on')) f.src='about:blank'; },700);
+  window.__wakeArmed=true; window.__wkT0=0; window.__wakeArmAt=performance.now();
+  showCaption('惊醒 —— 立刻合眼，回到梦中',5600);
+}
+/* 梦境背景音乐《星波随梦流》：由父页面播放（iframe 自动入场没有用户手势，会触发 autoplay 静音） */
+let dreamBGM=null;
+function startDreamBGM(){
+ try{
+  if(!dreamBGM){
+   const AC=new (window.AudioContext||window.webkitAudioContext)();
+   dreamBGM={ctx:AC,gain:null,filter:null,src:null,ready:false,want:false};
+   fetch('dream/audio/bgm.m4a').then(r=>r.arrayBuffer()).then(buf=>AC.decodeAudioData(buf)).then(decoded=>{
+    if(!dreamBGM)return;
+    const src=AC.createBufferSource();src.buffer=decoded;src.loop=true;
+    const flt=AC.createBiquadFilter();flt.type='lowpass';flt.frequency.value=12000;
+    const g=AC.createGain();g.gain.value=0;
+    src.connect(flt);flt.connect(g);g.connect(AC.destination);src.start();
+    dreamBGM.gain=g;dreamBGM.filter=flt;dreamBGM.src=src;dreamBGM.ready=true;
+   window.__dreamBGM=dreamBGM;
+    dreamBGM.muffle=on=>{ if(!dreamBGM.want)return;
+     flt.frequency.setTargetAtTime(on?750:12000,AC.currentTime,.5);
+     g.gain.setTargetAtTime(on?.42:.72,AC.currentTime,.6); };
+    if(dreamBGM.want)g.gain.setTargetAtTime(.72,AC.currentTime,1.2);
+   }).catch(()=>{dreamBGM=null;});
+  }
+  dreamBGM.want=true;
+  if(dreamBGM.ready)dreamBGM.gain.gain.setTargetAtTime(.72,dreamBGM.ctx.currentTime,1.2);
+ }catch(e){}
+}
+function stopDreamBGM(){
+ if(!dreamBGM)return;
+ dreamBGM.want=false;
+ if(dreamBGM.gain)dreamBGM.gain.gain.setTargetAtTime(0,dreamBGM.ctx.currentTime,.8);
+}
+function showDreamEpilogue(){
+ const e=$('dreamEpilogue');
+ if(e.dataset.on==='1')return;e.dataset.on='1';
+ e.classList.add('on');
+ const ps=[].slice.call(e.children);
+ ps.forEach((p,i)=>setTimeout(function(){p.classList.add('on');},1400+i*3000));
+ setTimeout(function(){stopDreamBGM();},10500);   // 结语将尽，音乐先行淡出
+ setTimeout(function(){
+  hideDreamWake();                                 // 揭开梦境：回到第二幕的黑
+  e.classList.remove('on');
+  setTimeout(function(){ps.forEach(function(p){p.classList.remove('on');});e.dataset.on='';},2000);
+ },14500);
+}
+addEventListener('message',e=>{
+  const f=$('dreamFrame');
+  if(e.data&&e.data.type==='bb_freeze'&&dreamBGM&&dreamBGM.muffle)dreamBGM.muffle(!!e.data.on);
+  if(e.data&&e.data.type==='bb_black')showDreamEpilogue();
+  if(!e.data||e.data.type!=='bb_wake') return;
+  (window.__wakeLog=window.__wakeLog||[]).push('msg-from:'+(e.source===f.contentWindow?'iframe':'OTHER:'+((e.source&&e.source.location&&e.source.location.href)||'?').slice(-40)));
+  if(e.source!==f.contentWindow) return;
+  hideDreamWake();
+});
+
+/* ---------------- 立刻合眼监听（惊醒后的 6 秒窗口内有效） ---------------- */
+/* 动作提示（第二幕）：根据困意状态告诉玩家现在能做什么 */
+setInterval(()=>{
+  const h=$('actHint');
+  if(!S.started||S.dream){h.classList.remove('show');return;}
+  let t='';
+  if(V.prog>0.97) t='✋ 张开五指 —— 坠入梦境';
+  else if(V.prog>0.8) t='😌 眼皮好重……握拳可以撑一下';
+  else if(S.blinks>0&&fist.uses<3) t='✊ 握拳 —— 甩掉一格困意（剩 '+(3-fist.uses)+' 次）';
+  else t='向前跑 · 每次眨眼，世界都会更困一点';
+  if(h.dataset.t!==t){h.dataset.t=t;h.textContent=t;}
+  h.classList.add('show');
+},500);
+/* 立刻合眼监听（惊醒后的 6 秒窗口内有效） */
+setInterval(()=>{
+  if(!window.__wakeArmed||!S.started) return;
+  if(performance.now()-window.__wakeArmAt>6000){ window.__wakeArmed=false; return; }
+  if(S.blinkValue>0.6){
+    if(!window.__wkT0) window.__wkT0=performance.now();
+    else if(performance.now()-window.__wkT0>700){
+      window.__wakeArmed=false;
+      showDreamFrame('reentry');              // 立刻合眼 → 回到第三幕起始点
+    }
+  } else window.__wkT0=0;
+},90);
+
+/* ---------------- 音乐开关（不再有风声音效，只有音乐） ---------------- */
+let muted=false;
+$('soundBtn').addEventListener('click',()=>{
+  muted=!muted;
+  $('soundBtn').textContent=muted?'🔇':'🔊';
+});
+
+/* ---------------- 风流线：跑动时的气流特效 ---------------- */
+const WIND_N=90;
+const windPos=new Float32Array(WIND_N*6);
+const windDat=[];
+for(let i=0;i<WIND_N;i++) windDat.push({x:0,y:0,z:0,l:1});
+const windGeo=new THREE.BufferGeometry();
+windGeo.setAttribute('position',new THREE.BufferAttribute(windPos,3));
+const windMat=new THREE.LineBasicMaterial({color:0xffe9d0,transparent:true,opacity:0,
+  blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
+const windLines=new THREE.LineSegments(windGeo,windMat);
+windLines.frustumCulled=false;
+scene.add(windLines);
+function windRespawn(w,camX,camY,camZ){
+  w.x=camX+(Math.random()*2-1)*24;
+  w.y=camY+(Math.random()*9-3);
+  w.z=camZ+120+Math.random()*50;
+  w.l=0.8+Math.random()*1.6;
+}
+
+/* ---------------- 背景音乐（随合眼淡出 → 余音 → 张手入梦停止） ---------------- */
+let bgm=null, bgmMissing=false;
+async function startBGM(){
+  if(bgm||bgmMissing) return;
+  try{
+    const AC=new (window.AudioContext||window.webkitAudioContext)();
+    let buf=null;
+    for(const ext of ['mp3','m4a']){
+      try{
+        const res=await fetch('audio/bgm.'+ext);
+        if(!res.ok) continue;
+        buf=await AC.decodeAudioData(await res.arrayBuffer());
+        bgmFile=ext; break;
+      }catch(e){}
+    }
+    if(!buf) throw new Error('no audio file');
+    const src=AC.createBufferSource(); src.buffer=buf; src.loop=true;
+    const flt=AC.createBiquadFilter(); flt.type='lowpass'; flt.frequency.value=14000;
+    const g=AC.createGain(); g.gain.value=0;
+    src.connect(flt); flt.connect(g); g.connect(AC.destination); src.start();
+    g.gain.setTargetAtTime(CFG.BGM_VOL, AC.currentTime, 0.8);   // 渐入
+    bgm={ctx:AC,gain:g,filter:flt,src,stopped:false};
+    window.__bgm=bgm;
+  }catch(e){ bgmMissing=true; toast('未找到 audio/bgm.mp3 / .m4a，背景音乐未启用',3600); }
+}
+let bgmFile='mp3';
+function stopBGM(){  // 入梦：1.5 秒淡到无声后停止
+  if(!bgm||bgm.stopped) return;
+  bgm.stopped=true;
+  bgm.gain.gain.setTargetAtTime(0, bgm.ctx.currentTime, 0.45);
+  setTimeout(()=>{ try{bgm.src.stop();}catch(e){} }, 1800);
+}
+
+/* ---------------- 日落之前：太阳进度 / 岔路 / 小事件 / 里程碑 ---------------- */
+const JOURNEY={total:0,sunP:0,nextGate:900,km:0,evT:42,ev:null,flavorT:0,flavorC:new THREE.Color(0xe8c07a),lastCamZ:CFG.START,brakeT:0};
+const FOG_BASE=new THREE.Color().copy(scene.fog.color);
+const DUSK=new THREE.Color(0x54638c);
+const VERSES=['风把影子拉得很长','远处的风车在替我数步子','这是今天最后一段上坡','麦田替我记住了这段路','太阳也在慢慢走','风穿过叶片，唱了一下'];
+const GATE_DEFS=[{c:0xffcf8a,name:'顺风',boost:true},{c:0xa9c8e8,name:'迟滞',boost:false}];
+window.__journey=JOURNEY;
+function chime(freq,dur,vol,type){
+ if(muted||!window.__bgm||!window.__bgm.ctx)return;
+ try{const AC=window.__bgm.ctx,t=AC.currentTime;
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'triangle';o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+dur+0.05);}catch(e){}
+}
+const gates=[];
+function spawnGatePair(z){
+ for(const side of[-1,1]){
+  const def=GATE_DEFS[Math.random()<.5?0:1];
+  const g=new THREE.Mesh(new THREE.TorusGeometry(26,1.1,8,42),
+   new THREE.MeshBasicMaterial({color:def.c,transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false}));
+  g.position.set(CFG.PATH_X+side*70,26,z);
+  g.userData={flavor:new THREE.Color(def.c),name:def.name};
+  scene.add(g);gates.push(g);
+ }
+}
+spawnGatePair(CFG.START+700);spawnGatePair(CFG.START+1300);spawnGatePair(CFG.START+2100);spawnGatePair(CFG.START+3000);
+/* 远处灯塔：晚风里唯一的建筑 */
+const lh=new THREE.Group();
+lh.add(new THREE.Mesh(new THREE.CylinderGeometry(14,26,170,10),new THREE.MeshBasicMaterial({color:0x1d2735})));
+const lhTop=new THREE.Mesh(new THREE.SphereGeometry(9,10,8),new THREE.MeshBasicMaterial({color:0xffe6b0}));lhTop.position.y=92;lh.add(lhTop);
+const beam=new THREE.Mesh(new THREE.PlaneGeometry(1400,26),new THREE.MeshBasicMaterial({color:0xffe6b0,transparent:true,opacity:.3,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+beam.position.y=90;lh.add(beam);
+lh.position.set(CFG.PATH_X-1500,85,4450);scene.add(lh);
+/* 小事件：夜车 / 鹿群 */
+function spawnTrain(){
+ const g=new THREE.Group();
+ g.add(new THREE.Mesh(new THREE.BoxGeometry(320,11,7),new THREE.MeshBasicMaterial({color:0x16202e})));
+ for(let i=0;i<14;i++){const win=new THREE.Mesh(new THREE.PlaneGeometry(5,3.4),new THREE.MeshBasicMaterial({color:0xffd9a0,transparent:true,opacity:.9}));
+  win.position.set(-140+i*21,2,3.8);g.add(win);}
+ const lamp=new THREE.Mesh(new THREE.SphereGeometry(2.2,8,6),new THREE.MeshBasicMaterial({color:0xfff2cc}));lamp.position.set(163,1,0);g.add(lamp);
+ g.position.set(CFG.PATH_X-1500,7,camera.position.z+760);g.rotation.y=Math.PI/2;
+ scene.add(g);JOURNEY.ev={type:'train',g,speed:280};
+ showCaption('远处有一列夜车',3200);chime(98,2.2,.028,'sine');
+}
+function spawnDeer(){
+ const g=new THREE.Group();
+ for(let i=0;i<4;i++){
+  const d=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.7,3.4),new THREE.MeshBasicMaterial({color:0x241c14}));
+  body.position.y=2.1;d.add(body);
+  const neck=new THREE.Mesh(new THREE.BoxGeometry(.5,1.6,.5),body.material);neck.position.set(0,3.2,1.6);neck.rotation.x=.5;d.add(neck);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.7,.7,1.1),body.material);head.position.set(0,3.9,2.2);d.add(head);
+  for(const[lx,lz]of[[-.4,-1.1],[.4,-1.1],[-.4,1.1],[.4,1.1]]){
+   const leg=new THREE.Mesh(new THREE.BoxGeometry(.22,1.5,.22),body.material);leg.position.set(lx,.75,lz);d.add(leg);}
+  d.position.set(i*7-10,0,(i%2)*2.5);g.add(d);
+ }
+ const z=camera.position.z+150,from=CFG.PATH_X-190;
+ g.position.set(from,0,z);g.rotation.y=0;
+ scene.add(g);JOURNEY.ev={type:'deer',g,speed:30,left:190};
+ showCaption('鹿群横穿跑道',3000);chime(659,.7,.03,'sine');
+}
+function journeyFrame(dt){
+ /* 累计里程（跨圈累计）+ 太阳下沉 */
+ JOURNEY.total+=S.speed*dt;
+ JOURNEY.sunP=clamp(JOURNEY.total/6500,0,1);
+ sunDir.set(0.18+JOURNEY.sunP*0.10,0.10-JOURNEY.sunP*0.16,1).normalize();
+ sky.material.uniforms.uSun.value.copy(sunDir);
+ sun.position.copy(sunDir).multiplyScalar(100000);
+ sun.intensity=2.2-JOURNEY.sunP*1.0;
+ hemi.intensity=1.25-JOURNEY.sunP*0.3;
+ const fogC=FOG_BASE.clone().lerp(DUSK,JOURNEY.sunP*0.55);
+ if(JOURNEY.flavorT>0){JOURNEY.flavorT-=dt;fogC.lerp(JOURNEY.flavorC,Math.min(1,JOURNEY.flavorT/4)*0.3);}
+ scene.fog.color.copy(fogC);
+ /* 里程碑旁白 */
+ const km=Math.floor(JOURNEY.total/1000);
+ if(km>JOURNEY.km){JOURNEY.km=km;showCaption(VERSES[(km-1)%VERSES.length],4400);chime(523,1.5,.04,'sine');chime(784,1.3,.028,'sine');}
+ /* 光门岔路 */
+ const camZ=camera.position.z;
+ for(let i=gates.length-1;i>=0;i--){
+  const g=gates[i];
+  if(g.position.z<camZ-80){
+   scene.remove(g);g.geometry.dispose();g.material.dispose();gates.splice(i,1);
+   spawnGatePair(camZ+900+Math.random()*450);
+  }
+ }
+ for(const g of gates){
+  if(g.userData.passed)continue;
+  if(JOURNEY.lastCamZ<g.position.z&&camZ>=g.position.z){
+   g.userData.passed=true;
+   const other=gates.find(function(o){return o!==g&&Math.abs(o.position.z-g.position.z)<500;});
+   const px=camera.position.x;
+   const nearer=!other||Math.abs(px-g.position.x)<=Math.abs(px-other.position.x);
+   JOURNEY.flavorT=4;JOURNEY.flavorC=new THREE.Color(g.userData.flavor);
+   if(nearer&&g.userData.boost){
+    S.boostKick=Math.min(2.2,S.boostKick+1.15);       // 金门：顺风加速
+    showCaption('✦ 顺风',1500);chime(880,.7,.05);
+   }else if(nearer){
+    JOURNEY.brakeT=2.6;                               // 蓝门：风变沉
+    showCaption('☾ 迟滞',1500);chime(294,1.1,.045);
+   }
+  }
+ }
+ JOURNEY.lastCamZ=camZ;
+ /* 小事件调度 */
+ if(!JOURNEY.ev&&JOURNEY.total>1200){
+  JOURNEY.evT-=dt;
+  if(JOURNEY.evT<=0){Math.random()<.5?spawnTrain():spawnDeer();JOURNEY.evT=45+Math.random()*35;}
+ }
+ if(JOURNEY.ev){
+  const e=JOURNEY.ev;e.g.position.x+=e.speed*dt;
+  if(e.type==='deer'){e.g.position.y=Math.abs(Math.sin(performance.now()/90))*.25;}
+  if(Math.abs(e.g.position.x-CFG.PATH_X)>1600){scene.remove(e.g);JOURNEY.ev=null;}
+ }
+}
+/* ---------------- 开始 ---------------- */
+$('btnCam').addEventListener('click',async()=>{
+  const b=$('btnCam'); b.disabled=true; b.textContent='正在启动摄像头…';
+  try{
+    await startCamera(); S.mode='hand'; begin();
+    $('previewWrap').classList.remove('hide');
+    toast(mpReady?'识别已就绪，抬手入镜 ✋':'识别模型加载中，稍等几秒…',3200);
+  }catch(e){
+    window.__errs.push('cam: '+e);
+    toast('无法访问摄像头：'+camHint(e)+'（已切换鼠标模式）',6500); S.mode='mouse'; begin();
+  }finally{ b.disabled=false; b.textContent='✋ 开启摄像头开始'; }
+});
+$('btnMouse').addEventListener('click',()=>{ S.mode='mouse'; begin(); });
+function begin(){
+  S.started=true;
+  $('startOverlay').classList.add('hide');
+  $('titleBar').style.opacity='0.25';
+  showCaption('风车农场 —— 向前跑，别停下来',4200);
+  startBGM();   // 背景音乐：随合眼淡出，到顶只留余音，张手入梦时停止
+}
+
+/* ---------------- 预览小窗 ---------------- */
+const pcv=$('preview'), pctx=pcv.getContext('2d');
+let lastHandRes=null;
+function drawPreview(){
+  if(!S.camOn) return;
+  const w=pcv.width,h=pcv.height;
+  pctx.save(); pctx.translate(w,0); pctx.scale(-1,1);
+  pctx.drawImage(video,0,0,w,h); pctx.restore();
+  const res=lastHandRes;
+  if(res&&res.landmarks){
+    pctx.strokeStyle='rgba(255,235,210,.9)'; pctx.lineWidth=2;
+    for(const lm of res.landmarks){
+      pctx.beginPath();
+      for(const [a,b] of CONN){ pctx.moveTo((1-lm[a].x)*w,lm[a].y*h); pctx.lineTo((1-lm[b].x)*w,lm[b].y*h); }
+      pctx.stroke();
+      pctx.fillStyle='#ff9e7d';
+      for(const pt of lm){ pctx.beginPath(); pctx.arc((1-pt.x)*w,pt.y*h,2.5,0,7); pctx.fill(); }
+    }
+  }
+  pctx.fillStyle='rgba(255,240,220,.25)'; pctx.fillRect(8,8,60,6);
+  pctx.fillStyle='#ffd9a8'; pctx.fillRect(8,8,60*clamp(S.blinkValue,0,1),6);
+}
+
+/* ---------------- 主循环：向前跑 ---------------- */
+let last=performance.now(), hudT=0;
+const iq=[];   // 输入延迟队列：记录手的指令，按困意延迟送达世界
+let lastFrameAt=performance.now();
+function frame(now){
+  lastFrameAt=performance.now();
+  requestAnimationFrame(frame);
+  if(!S.ready){ return; }
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  const nowS=now/1000;
+
+  if(S.camOn&&video.readyState>=2&&video.currentTime!==lastVideoTime){
+    lastVideoTime=video.currentTime;
+    if(handLM){ try{ const r=handLM.detectForVideo(video,mpNow()); lastHandRes=r; mpFailStreak=0;
+      if(r&&r.landmarks&&r.landmarks.length&&!S.dream) handInput(r.landmarks,dt,nowS); }catch(e){
+      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+    if(faceLM){ try{ detectBlink(faceLM.detectForVideo(video,mpNow()),now); mpFailStreak=0; }catch(e){
+      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+    // 统一追踪：第一幕是唯一识别源，入梦期间把结果实时推进梦境层
+    if(S.dream){ try{const w=$('dreamFrame').contentWindow;if(w&&w.__dreamInput)w.__dreamInput(lastHandRes,S.blinkValue,performance.now());}catch(e){} }
+  }
+  S.hand.present=S.hand.present&&(nowS-S.hand.lastSeen<CFG.HAND_LOST_GRACE);
+  if(!S.hand.present&&S.mode==='hand'){ S.tThrottle=0; S.tSteer.x=Math.sin(nowS*0.3)*0.1; S.tSteer.y=0; }
+  if(S.mode==='mouse') S.tThrottle=S.mouse.down?1:0;
+  if(S.dream) return;   // 入梦：风车世界暂停，梦境在 iframe 层自转（识别保留，供惊醒后「立刻合眼」监听）
+
+  // 困意进度：由眨眼次数驱动（0..1，6 次到顶）
+  const prog=clamp(S.blinks/CFG.BLINKS_MAX,0,1);
+  // 输入延迟队列：困意越深，手的指令越晚抵达世界（意志与身体的时差）
+  iq.push({t:nowS,x:S.tSteer.x,y:S.tSteer.y,th:S.tThrottle});
+  const delay=0.12+prog*CFG.DELAY_MAX;
+  while(iq.length>2 && iq[1].t<=nowS-delay) iq.shift();
+  const d=iq[0];
+
+  const k=1-Math.exp(-dt*8);
+  S.steer.x+=(d.x-S.steer.x)*k;
+  S.steer.y+=(d.y-S.steer.y)*k;
+  S.throttle+=(d.th-S.throttle)*(1-Math.exp(-dt*4));
+  S.boostKick*=Math.exp(-dt*2.2);
+  // 高速起跑；眨眼越多，越跑不动
+  const slowF=1-prog*0.5;
+  S.speed=(CFG.CRUISE+S.throttle*CFG.PUSH_MAX+S.boostKick*CFG.CRUISE*0.5)*slowF;
+  if(JOURNEY.brakeT>0){JOURNEY.brakeT-=dt;S.speed*=0.45+0.55*(1-Math.min(1,JOURNEY.brakeT/2.6));}
+  S.travel+=S.speed*dt;
+  journeyFrame(dt);
+  // 后期视觉：平滑趋近目标状态（眨眼后约 1.5 秒缓缓滑入，不跳变）
+  V.prog+=(prog-V.prog)*(1-Math.exp(-dt*1.5));
+  napPass.uniforms.uProg.value=V.prog;
+  scene.fog.near=CFG.FOG_NEAR*(1-V.prog*0.5);
+  scene.fog.far=CFG.FOG_FAR*(1-V.prog*0.45);
+  // 合眼全黑：困意顶点，世界沉入纯黑，等待张开五指
+  if(!S.dream){
+    const wf=$('wrapFade');
+    if(V.prog>0.985){
+      if(!S.blacked){S.blacked=true;wf.style.transition='opacity 1.1s';wf.style.background='#04060d';}
+      wf.style.opacity=String(clamp((V.prog-0.985)/0.012,0,1)*0.96);
+    } else if(S.blacked){S.blacked=false;wf.style.transition='opacity 1.4s';wf.style.opacity='0';}
+  }
+
+  // 前进：沿 +Z 主轴迎着落日跑；横向按转向偏移；到尽头回绕（雾里悄悄重置）
+  let pz=CFG.START+S.travel;
+  if(pz>CFG.END){
+    S.travel=0; pz=CFG.START;
+    const wf=$('wrapFade'); wf.style.opacity='1'; setTimeout(()=>wf.style.opacity='0',260);
+  }
+  const px=CFG.PATH_X - S.steer.x*CFG.STRAFE;
+  const bob=Math.sin(S.travel*0.9)*0.05;
+  camera.position.set(px, CFG.EYE_H+bob, pz);
+  // 朝向：面向前进方向(+Z)，掌心左/右 = 朝左/右转，微微低头 + 奔跑侧倾
+  const yaw=-S.steer.x*CFG.STEER_YAW;
+  const pitch=-0.025-S.steer.y*0.05;
+  camera.lookAt(px + Math.sin(yaw)*10, CFG.EYE_H+bob + pitch*10, pz + Math.cos(yaw)*10);
+  camera.rotateZ(S.steer.x*0.02);
+  const speedN=clamp(S.speed/(CFG.CRUISE+CFG.PUSH_MAX),0,1);
+  camera.fov=62+speedN*16; camera.updateProjectionMatrix();
+
+  // 叶片随风转动：跑得越快转得越快（全场每台独立相位）
+  for(const r of rotors) r.rotation.x+=dt*(0.6+speedN*2.6);
+
+  // 合眼全黑后，张开五指 → 自动坠入第三幕（困意近满才有效；音乐随之停止）
+  if(!S.dream&&S.mode==='hand'&&V.prog>0.97&&S.hand.present&&fist.spread>0.55){
+    S.dreamHold=(S.dreamHold||0)+dt;
+    if(S.dreamHold>0.35) enterDream();
+  } else S.dreamHold=Math.max(0,(S.dreamHold||0)-dt*1.5);
+
+  // 背景音乐：随合眼淡出 → 完全合眼只留余音（缓缓衰减）→ 入梦即止
+  if(bgm&&!bgm.stopped){
+    if(V.prog>0.97&&!S.fullAt) S.fullAt=nowS;
+    let v;
+    if(S.dream) v=0;
+    else if(muted) v=0;
+    else if(S.fullAt!==undefined) v=0.06*Math.exp(-(nowS-S.fullAt)*0.10);
+    else v=CFG.BGM_VOL*(1-V.prog*0.8);
+    bgm.gain.gain.value+=(v-bgm.gain.gain.value)*0.08;
+    bgm.filter.frequency.value=14000-V.prog*13000;
+  }
+
+  // 风流线：向前跑时气流从身边掠过，速度越快越长越亮
+  for(let i=0;i<WIND_N;i++){
+    const w=windDat[i];
+    w.z-=S.speed*2.2*dt;
+    if(w.z<camera.position.z-25||w.z>camera.position.z+220) windRespawn(w,camera.position.x,camera.position.y,camera.position.z);
+    const L=Math.min(w.l*(0.35+speedN*1.4),6);
+    windPos[i*6]=w.x;   windPos[i*6+1]=w.y; windPos[i*6+2]=w.z;
+    windPos[i*6+3]=w.x; windPos[i*6+4]=w.y; windPos[i*6+5]=w.z+L;
+  }
+  windGeo.attributes.position.needsUpdate=true;
+  windMat.opacity=clamp(speedN*0.85+0.05,0.05,0.55)*(S.dream?0.15:1);
+
+  sky.position.copy(camera.position);
+  composer.render();
+  drawPreview();
+
+  hudT+=dt;
+  if(hudT>0.2){
+    hudT=0;
+    const modeTxt=S.mode==='hand'?(S.hand.present?'模式 手掌 ✋':'模式 手掌（寻找手中…）')
+                 :S.mode==='mouse'?'模式 鼠标 🖱（按住加速 · B 眨眼 · F 握拳回退）':'等待开始';
+    $('status').innerHTML=modeTxt+`<br>速度 ${S.speed.toFixed(1)} m/s · 已跑 ${(S.travel/1000).toFixed(2)} km`;
+    const left=Math.max(0,3-fist.uses);
+    $('blinkTag').textContent=`眨眼 × ${S.blinks} ｜ 握拳回退 余 ${left}`;
+    $('speedFill').style.width=clamp(speedN*100,4,100)+'%';
+    $('drowFill').style.width=clamp(S.blinks/CFG.BLINKS_MAX*100,0,100)+'%';
+    $('boostTag').style.opacity=clamp(S.boostKick-0.7,0,0.9);
+  }
+}
+/* 后备驱动：窗格被遮挡/节流导致 rAF 停摆时，世界以慢速继续 */
+setInterval(function(){
+  if(performance.now()-lastFrameAt<250)return;
+  frame(performance.now());
+},250);
+/* 后备驱动：窗格被遮挡/节流导致 rAF 停摆时，世界以慢速继续 */
+setInterval(function(){
+  if(performance.now()-lastFrameAt<250)return;
+  frame(performance.now());
+},250);
+resize();
+requestAnimationFrame(frame);
+S.ready=true; // 场景壳就绪（模型后台继续加载）
+</script>
+</body>
+</html>

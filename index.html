@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日落之后 · 第一幕 清醒</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#1a1420;
+    font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+
+  #titleBar{position:fixed;top:26px;left:0;right:0;text-align:center;pointer-events:none;z-index:10}
+  #titleBar h1{font-size:clamp(26px,4vw,44px);font-weight:800;letter-spacing:.35em;text-indent:.35em;
+    color:#fff7ee;
+    text-shadow:0 2px 0 rgba(201,110,90,.55), 0 0 26px rgba(255,190,130,.55), 0 6px 30px rgba(80,40,60,.45);}
+  #titleBar p{margin-top:8px;font-size:14px;letter-spacing:.5em;text-indent:.5em;color:#fff3e2;
+    text-shadow:0 1px 8px rgba(90,40,50,.6);opacity:.9}
+
+  #startOverlay{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;
+    background:radial-gradient(120% 100% at 50% 110%, rgba(245,198,165,.28), rgba(26,20,32,.9) 70%);
+    backdrop-filter:blur(3px);transition:opacity .8s;}
+  #startOverlay.hide{opacity:0;pointer-events:none}
+  #startOverlay h1{font-size:clamp(34px,6vw,64px);font-weight:800;letter-spacing:.3em;text-indent:.3em;
+    color:#fff7ee;
+    text-shadow:0 3px 0 rgba(201,110,90,.6), 0 0 34px rgba(255,190,130,.6), 0 10px 44px rgba(30,15,30,.7);}
+  #startOverlay .sub{font-size:16px;letter-spacing:.6em;text-indent:.6em;color:#f6e3cf;opacity:.95}
+  #startOverlay .rules{display:flex;flex-direction:column;gap:9px;margin:6px 0 2px;text-align:center}
+  #startOverlay .rules span{color:#f9ecd9;font-size:15px;letter-spacing:.12em;opacity:.92}
+  #startOverlay .rules em{color:#ffd9a8;font-style:normal;font-weight:700}
+  .btnRow{display:flex;gap:18px;margin-top:8px;flex-wrap:wrap;justify-content:center}
+  .bigBtn{border:none;border-radius:999px;padding:16px 34px;font-size:17px;font-weight:700;
+    letter-spacing:.1em;cursor:pointer;transition:transform .15s, box-shadow .15s;font-family:inherit}
+  .bigBtn:hover{transform:translateY(-2px) scale(1.03)}
+  .bigBtn:disabled{opacity:.55;cursor:wait;transform:none}
+  #btnCam{background:linear-gradient(135deg,#ffd9a8,#ff9e7d);color:#4a2318;
+    box-shadow:0 6px 26px rgba(255,150,110,.45)}
+  #btnMouse{background:rgba(255,247,238,.12);color:#fff3e2;border:1px solid rgba(255,247,238,.4)}
+  #startOverlay .tiny{font-size:12px;color:#e8d5c2;opacity:.65;letter-spacing:.08em;line-height:1.8;text-align:center}
+
+  #previewWrap{position:fixed;left:18px;bottom:18px;z-index:20;border-radius:14px;overflow:hidden;
+    border:1px solid rgba(255,240,220,.35);box-shadow:0 8px 30px rgba(20,10,25,.5);
+    opacity:.92;transition:opacity .5s}
+  #previewWrap.hide{opacity:0;pointer-events:none}
+  #preview{display:block;width:200px;height:150px;background:#111}
+  #hud{position:fixed;right:18px;bottom:18px;z-index:20;text-align:right;user-select:none}
+  #status{color:#fff3e2;font-size:12.5px;letter-spacing:.08em;opacity:.85;
+    text-shadow:0 1px 6px rgba(20,10,25,.8);line-height:1.9}
+  #blinkTag{display:inline-block;margin-top:6px;padding:4px 12px;border-radius:999px;
+    background:rgba(255,240,220,.14);border:1px solid rgba(255,240,220,.3);
+    color:#ffe9cf;font-size:12px;letter-spacing:.1em}
+  #speedWrap{width:120px;height:5px;border-radius:3px;background:rgba(255,247,238,.18);
+    margin:8px 0 0 auto;overflow:hidden}
+  #speedFill{height:100%;width:30%;border-radius:3px;
+    background:linear-gradient(90deg,#ffd9a8,#ff9e7d);transition:width .12s}
+  #soundBtn{position:fixed;right:18px;top:18px;z-index:20;width:42px;height:42px;border-radius:50%;
+    border:1px solid rgba(255,240,220,.35);background:rgba(30,18,30,.35);color:#fff3e2;
+    font-size:17px;cursor:pointer;transition:background .2s}
+  #soundBtn:hover{background:rgba(255,240,220,.18)}
+  #boostTag{position:fixed;left:50%;bottom:12%;transform:translateX(-50%);z-index:15;
+    font-size:22px;font-weight:800;letter-spacing:.5em;text-indent:.5em;color:#fff0d8;
+    text-shadow:0 0 18px rgba(255,170,110,.8);opacity:0;pointer-events:none;transition:opacity .2s}
+  #caption{position:fixed;left:50%;bottom:7%;transform:translateX(-50%);z-index:15;
+    padding:10px 26px;border-radius:999px;background:rgba(30,16,28,.45);border:1px solid rgba(255,240,220,.25);
+    color:#ffeccc;font-size:15px;letter-spacing:.3em;text-indent:.3em;opacity:0;transition:opacity 1s;pointer-events:none}
+  #caption.show{opacity:1}
+  #toast{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:40;
+    padding:10px 22px;border-radius:12px;background:rgba(30,16,28,.78);color:#ffeccc;
+    font-size:14px;letter-spacing:.06em;opacity:0;transition:opacity .4s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.show{opacity:1}
+  #fatal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    color:#ffd9c9;font-size:16px;letter-spacing:.05em;background:rgba(20,10,20,.92);text-align:center;line-height:2}
+  .hidden-src{position:fixed;left:-9999px;top:0;width:640px;height:480px}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="titleBar">
+  <h1>日落之后</h1>
+  <p>第一幕 · 清醒 —— 黄昏与暖光</p>
+</div>
+
+<div id="startOverlay">
+  <h1>日落之后</h1>
+  <div class="sub">SLEEPY RUN · ACT 1</div>
+  <div class="rules">
+    <span><em>左右移动掌心</em> —— 控制方向</span>
+    <span><em>朝镜头方向推掌</em> —— 加速奔跑</span>
+    <span>你的每一次眨眼，都会被这幅黄昏悄悄记下……</span>
+  </div>
+  <div class="btnRow">
+    <button class="bigBtn" id="btnCam">✋ 开启摄像头开始</button>
+    <button class="bigBtn" id="btnMouse">🖱 无摄像头 · 鼠标模式</button>
+  </div>
+  <div class="tiny">摄像头画面只在你的浏览器本地处理，不上传任何数据<br>识别模型已内置本地（mp-local，无需联网）· 出问题可打开 <a href="诊断.html" style="color:#ffd9a8">诊断.html</a> 一键检查</div>
+</div>
+
+<div id="previewWrap" class="hide"><canvas id="preview" width="320" height="240"></canvas></div>
+
+<div id="hud">
+  <div id="status">模式 等待开始</div>
+  <div id="blinkTag">眨眼 × 0</div>
+  <div id="speedWrap"><div id="speedFill"></div></div>
+</div>
+
+<button id="soundBtn" title="风声开关">🔇</button>
+<div id="boostTag">跑 ——</div>
+<div id="caption"></div>
+<div id="toast"></div>
+<div id="fatal"></div>
+<video id="cam" class="hidden-src" playsinline muted></video>
+
+<script>
+"use strict";
+window.__errs=[]; window.addEventListener('error',e=>{window.__errs.push(String(e.message||e));});
+const $=id=>document.getElementById(id);
+const fatal=msg=>{const f=$('fatal');f.style.display='flex';f.innerHTML=msg;};
+
+/* ================= 可调参数 ================= */
+const CFG={
+  CRUISE:1.7,         // 巡航速度（无输入）
+  PUSH_MAX:2.8,       // 推掌最大附加速度
+  STEER_GAIN:1.0,     // 转向灵敏度
+  STEER_DEAD:0.05,    // 转向死区
+  HAND_LOST_GRACE:0.8,// 手消失多少秒后回退自动巡航
+};
+/* ============================================ */
+
+/* ---------------- WebGL2 ---------------- */
+const canvas=$('gl');
+const gl=canvas.getContext('webgl2',{antialias:true});
+if(!gl){ fatal('这台设备的浏览器不支持 WebGL2<br>请换用最新版 Chrome / Edge'); throw new Error('no webgl2'); }
+
+const VERT=`#version 300 es
+layout(location=0) in vec2 aPos; out vec2 vUv;
+void main(){ vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.,1.); }`;
+
+/* 黄昏公路：田垄、土路、虞美人、电线杆与电线、落日与云 */
+const FRAG = [
+'#version 300 es',
+'precision highp float;',
+'in vec2 vUv; out vec4 frag;',
+'uniform vec2  uRes;',
+'uniform float uTime;',
+'uniform float uTravel;',
+'uniform vec2  uSteer;',
+'uniform float uBoost;',
+'uniform float uFov;',
+'',
+'float hash21(vec2 p){ p=fract(p*vec2(127.1,311.7)); p+=dot(p,p+34.545); return fract(p.x*p.y); }',
+'float noise2(vec2 p){',
+'  vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);',
+'  return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x),',
+'             mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x), f.y);',
+'}',
+'float fbm(vec2 p){ float a=0.5,s=0.0; for(int i=0;i<4;i++){ s+=a*noise2(p); p=p*2.03+11.7; a*=0.5; } return s; }',
+'float roadX(float z){ return sin(z*0.045)*2.2 + sin(z*0.021+1.7)*3.1; }',
+'float sdSeg(vec2 p, vec2 a, vec2 b){',
+'  vec2 pa=p-a, ba=b-a;',
+'  float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-6),0.0,1.0);',
+'  return length(pa-ba*h);',
+'}',
+'',
+'void main(){',
+'  vec2 p=vUv*2.0-1.0; p.x*=uRes.x/uRes.y;',
+'  // 奔跑的轻微摇晃（翻滚角 + 上下颠簸）',
+'  float roll=uSteer.x*0.035 + sin(uTravel*0.9)*0.008;',
+'  float cr=cos(roll), sr=sin(roll); p=mat2(cr,-sr,sr,cr)*p;',
+'  float camY=1.25 + sin(uTravel*2.1)*0.035;',
+'  vec3 ro=vec3(roadX(uTravel)*0.5 + uSteer.x*1.6, camY, uTravel);',
+'',
+'  float yaw=uSteer.x*0.30;',
+'  vec3 fwd=normalize(vec3(sin(yaw), -0.14 - uSteer.y*0.10, -1.0));',
+'  vec3 rgt=normalize(cross(fwd, vec3(0.0,1.0,0.0)));',
+'  vec3 up2=cross(rgt, fwd);',
+'  vec3 rd=normalize(fwd + (p.x*rgt + p.y*up2)*uFov*0.62);',
+'',
+'  vec3 haze=vec3(0.98,0.80,0.62);           // 暖雾 / 地平线',
+'  vec3 sunDir=normalize(vec3(0.0,0.10,-1.0));',
+'',
+'  /* ---------- 天空 ---------- */',
+'  float h=clamp(rd.y,0.0,1.0);',
+'  vec3 sky=mix(vec3(0.99,0.80,0.60), vec3(0.86,0.62,0.72), smoothstep(0.02,0.25,h));',
+'  sky=mix(sky, vec3(0.53,0.62,0.76), smoothstep(0.22,0.70,h));',
+'  float sd=max(dot(rd,sunDir),0.0);',
+'  sky+=vec3(1.0,0.75,0.45)*pow(sd,30.0)*0.55;',
+'  sky+=vec3(1.0,0.90,0.70)*smoothstep(0.9993,0.9997,sd)*1.15;',
+'  { // 云',
+'    float cy=max(rd.y,0.03);',
+'    vec2 cuv=vec2(rd.x/cy, 0.6)+vec2(uTime*0.004,0.0);',
+'    float cl=fbm(cuv*1.1);',
+'    float cm=smoothstep(0.52,0.74,cl)*smoothstep(0.02,0.14,rd.y)*(1.0-smoothstep(0.45,0.85,rd.y));',
+'    vec3 cloudC=mix(vec3(1.0,0.82,0.72), vec3(1.0,0.95,0.88), smoothstep(0.04,0.30,rd.y));',
+'    sky=mix(sky, cloudC, cm*0.65);',
+'  }',
+'  { // 远山剪影',
+'    float az=rd.x/max(-rd.z,0.05);',
+'    float hillH=0.006+0.035*(0.6*noise2(vec2(az*4.0,4.2))+0.4*noise2(vec2(az*11.0,9.1)));',
+'    sky=mix(vec3(0.50,0.40,0.50), sky, smoothstep(hillH,hillH+0.012,rd.y));',
+'  }',
+'  vec3 col=sky;',
+'',
+'  /* ---------- 地面 ---------- */',
+'  float tG=1e5;',
+'  if(rd.y<-0.001) tG=ro.y/(-rd.y);',
+'  if(rd.y<-0.001){',
+'    vec3 q=ro+rd*tG;',
+'    float z=q.z, x=q.x;',
+'    float fog=clamp(1.0-exp(-tG*0.012),0.0,1.0);',
+'    float nF=fbm(vec2(x*0.15,z*0.15));',
+'    vec3 ground=mix(vec3(0.45,0.48,0.22), vec3(0.78,0.62,0.28), smoothstep(0.35,0.70,nF));',
+'    ground*=0.92+0.16*smoothstep(0.45,0.55,noise2(vec2(z*0.06,3.7)));   // 田垄条',
+'    { // 虞美人（近处才有）',
+'      vec2 cell=floor(vec2(x*1.2,z*1.2));',
+'      float hp=hash21(cell);',
+'      vec2 fpos=fract(vec2(x*1.2,z*1.2))-(vec2(hp,fract(hp*7.7))-0.5)*0.7;',
+'      float poppy=smoothstep(0.05+0.03*hp,0.02,length(fpos))*step(0.82,hp);',
+'      poppy*=1.0-smoothstep(25.0,70.0,tG);',
+'      ground=mix(ground, vec3(0.82,0.16,0.16), poppy);',
+'    }',
+'    float rx=roadX(z);',
+'    float lat=x-rx;',
+'    float road=1.0-smoothstep(1.5,1.9,abs(lat));',
+'    vec3 dirt=vec3(0.72,0.60,0.47)*(0.9+0.2*noise2(vec2(x*2.0,z*2.0)));',
+'    dirt*=1.0-exp(-pow((abs(lat)-0.55)*4.0,2.0))*0.25;                  // 车辙',
+'    ground=mix(ground,dirt,road);',
+'    float edge=smoothstep(1.2,1.5,abs(lat))*smoothstep(2.6,2.2,abs(lat));',
+'    ground*=1.0-0.15*edge*noise2(vec2(x*3.0,z*0.8));                    // 路边草',
+'    col=mix(ground,haze,fog);',
+'  }',
+'',
+'  /* ---------- 电线杆（沿路右侧） ---------- */',
+'  float S=9.0;',
+'  for(int i=0;i<8;i++){',
+'    float zP=(ceil(ro.z/S)-float(i))*S;',
+'    float t=(zP-ro.z)/rd.z;',
+'    if(t<=0.1||t>200.0) continue;',
+'    vec3 q=ro+rd*t;',
+'    float dx=abs(q.x-(roadX(zP)+2.35));',
+'    float fogP=clamp(1.0-exp(-t*0.012),0.0,1.0);',
+'    vec3 poleC=vec3(0.30,0.22,0.22);',
+'    float body=smoothstep(0.10,0.06,dx)*step(0.0,q.y)*step(q.y,2.7);',
+'    float bar=smoothstep(0.55,0.50,dx)*',
+'      (smoothstep(2.28,2.24,q.y)*smoothstep(2.12,2.16,q.y)',
+'      +smoothstep(2.52,2.48,q.y)*smoothstep(2.36,2.40,q.y));',
+'    col=mix(col,poleC,max(body,bar)*(1.0-fogP*0.85));',
+'  }',
+'  /* ---------- 电线（屏幕空间投影，恒定细线宽） ---------- */',
+'  for(int hh=0;hh<2;hh++){',
+'    float baseY=(hh==0)?2.42:2.16;',
+'    for(int i=0;i<7;i++){',
+'      float z1=(ceil(ro.z/S)-float(i))*S;',
+'      float best=1e3;',
+'      vec2 prev=vec2(0.0); bool has=false;',
+'      for(int j=0;j<=16;j++){',
+'        float u=float(j)/16.0;',
+'        float z=z1-u*S;',
+'        vec3 W=vec3(roadX(z)+2.35, baseY-0.22*sin(3.14159*u), z);',
+'        vec3 dv=W-ro;',
+'        float depth=dot(dv,fwd);',
+'        if(depth<0.15||depth>220.0){ has=false; continue; }',
+'        vec2 sp=vec2(dot(dv,rgt),dot(dv,up2))/(depth*uFov*0.62);',
+'        if(has) best=min(best,sdSeg(p,prev,sp));',
+'        else    best=min(best,length(sp-p));',
+'        prev=sp; has=true;',
+'      }',
+'      float wire=smoothstep(0.0055,0.0022,best);',
+'      float zmid=z1-S*0.5;',
+'      float fogW=clamp(1.0-exp(-max(ro.z-zmid,0.0)*0.012),0.0,1.0);',
+'      col=mix(col,vec3(0.25,0.18,0.20),wire*(1.0-fogW*0.9));',
+'    }',
+'  }',
+'',
+'  /* ---------- 飞絮 / 花粉（速度线） ---------- */',
+'  for(int L=0;L<2;L++){',
+'    float lf=float(L);',
+'    vec2 qq=p*(1.0+lf*0.7)*2.0+vec2(sin(uTime*0.1),0.0)+vec2(0.0,uTravel*(0.06+0.04*lf));',
+'    vec2 id=floor(qq); vec2 f=fract(qq)-0.5;',
+'    float hp2=hash21(id+lf*17.0);',
+'    vec2 off=(vec2(hp2,fract(hp2*9.3))-0.5)*0.8;',
+'    float dd=length(f-off);',
+'    float tw=0.5+0.5*sin(uTime*2.0+hp2*40.0);',
+'    col+=vec3(1.0,0.9,0.7)*smoothstep(0.05,0.0,dd)*step(0.85,hp2)*tw*0.30;',
+'  }',
+'  { // 推掌冲刺的暖色速度线',
+'    float ang=atan(p.y,p.x)/6.2831853+0.5;',
+'    float sn=noise2(vec2(ang*36.0,floor(uTravel*2.0)));',
+'    col+=vec3(1.0,0.85,0.6)*smoothstep(0.62,0.95,sn)*exp(-length(p)*1.6)*uBoost*0.35;',
+'  }',
+'',
+'  /* ---------- 后期：暖调 / 颗粒 / 暗角 ---------- */',
+'  col=mix(col,col*vec3(1.05,0.95,0.88),0.6);',
+'  col+= (hash21(vUv*uRes+fract(uTime)*61.7)-0.5)*0.035;',
+'  col*=1.0-0.22*smoothstep(0.5,1.5,length(p*vec2(0.85,1.0)));',
+'  frag=vec4(pow(max(col,0.0),vec3(0.95)),1.0);',
+'}'
+].join('\n');
+
+function makeShader(type,src){
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
+    fatal('着色器编译失败：<br><pre style="text-align:left">'+gl.getShaderInfoLog(s)+'</pre>');
+    throw new Error(gl.getShaderInfoLog(s));
+  } return s;
+}
+const prog=gl.createProgram();
+gl.attachShader(prog,makeShader(gl.VERTEX_SHADER,VERT));
+gl.attachShader(prog,makeShader(gl.FRAGMENT_SHADER,FRAG));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){ fatal('着色器链接失败'); throw new Error('link'); }
+gl.useProgram(prog);
+const buf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 3,-1, -1,3]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const U={}; for(const n of ['uRes','uTime','uTravel','uSteer','uBoost','uFov']) U[n]=gl.getUniformLocation(prog,n);
+function resize(){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.floor(innerWidth*dpr); canvas.height=Math.floor(innerHeight*dpr);
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener('resize',resize); resize();
+
+/* ---------------- 状态 ---------------- */
+const S={
+  mode:'idle',            // idle | hand | mouse
+  travel:0, speed:CFG.CRUISE, boostKick:0,
+  steer:{x:0,y:0}, tSteer:{x:0,y:0},
+  throttle:0, tThrottle:0,
+  blinks:0,
+  hand:{present:false,lastSeen:-9,size:0,base:0.16,prevSize:0},
+  mouse:{down:false,x:0,y:0},
+  camOn:false, started:false,
+};
+window.__state=S;
+
+function toast(msg,ms=2600){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),ms);
+}
+function showCaption(txt,ms=3200){
+  const c=$('caption'); c.textContent=txt; c.classList.add('show');
+  clearTimeout(c._h); c._h=setTimeout(()=>c.classList.remove('show'),ms);
+}
+
+/* ---------------- MediaPipe（本地离线包优先，CDN 兜底，失败自动重试） ---------------- */
+const video=$('cam');
+let handLM=null, faceLM=null, mpReady=false, lastVideoTime=-1, mpFailStreak=0;
+const MP_CDN='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MP_SOURCES=[
+ {lib:'./mp-local/vision_bundle.mjs', wasm:'mp-local/wasm', hand:'mp-local/hand_landmarker.task', face:'mp-local/face_landmarker.task'},
+ {lib:MP_CDN+'/vision_bundle.mjs', wasm:MP_CDN+'/wasm',
+  hand:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+  face:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'}
+];
+let mpLoading=false;
+async function buildLM(vision,src){
+  const fs=await vision.FilesetResolver.forVisionTasks(src.wasm);
+  try{ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.hand,delegate:'GPU'},runningMode:'VIDEO',numHands:2}); }
+  catch(e){ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.hand,delegate:'CPU'},runningMode:'VIDEO',numHands:2}); }
+  try{ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.face,delegate:'GPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); }
+  catch(e){ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:src.face,delegate:'CPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); }
+}
+async function initModels(attempt){
+  attempt=attempt||0;
+  if(mpReady||mpLoading)return; mpLoading=true;
+  try{
+    let lastErr=null;
+    for(const src of MP_SOURCES){ try{ const vision=await import(src.lib); await buildLM(vision,src); lastErr=null; break; }catch(e){ lastErr=e; } }
+    if(lastErr) throw lastErr;
+    mpReady=true; mpFailStreak=0;
+    if(S.started) toast('手势与眨眼识别已就绪 ✋');
+  }catch(e){
+    window.__errs.push('mp: '+e);
+    if(attempt<2){ if(S.started) toast('识别模型加载失败，正在重试…',2500); mpLoading=false; setTimeout(()=>initModels(attempt+1),2500*(attempt+1)); return; }
+    if(S.started) toast('识别模型加载失败：请检查网络后刷新页面',4200);
+  }
+  mpLoading=false;
+}
+function camHint(e){
+  const n=(e&&e.name)||'';
+  if(n==='NotAllowedError') return '摄像头权限被拒：系统设置→隐私与安全性→摄像头 允许 Safari；Safari→设置→网站→摄像头 允许 localhost';
+  if(n==='NotReadableError'||n==='AbortError') return '摄像头被其他应用占用：请关闭微信视频/会议/监考类应用后重试';
+  if(n==='NotFoundError') return '未检测到摄像头设备';
+  return (e&&e.message)||n||'未知错误';
+}
+// 页面加载即预热模型（不占摄像头），正式开始时零等待
+initModels();
+
+async function startCamera(){
+  const stream=await navigator.mediaDevices.getUserMedia({
+    video:{width:640,height:480,facingMode:'user'},audio:false});
+  video.srcObject=stream; await video.play(); S.camOn=true;
+}
+
+/* ---------------- 眨眼状态机 ---------------- */
+const blink={closedFrames:0,wasClosed:false,lastTime:-1e9};
+function detectBlink(res,nowMs){
+  if(!res||!res.faceBlendshapes||!res.faceBlendshapes.length) return;
+  const cats=res.faceBlendshapes[0].categories;
+  let bl=0,n=0;
+  for(const c of cats){ if(c.categoryName==='eyeBlinkLeft'||c.categoryName==='eyeBlinkRight'){bl+=c.score;n++;} }
+  if(!n) return; bl/=n;
+  S.blinkValue=bl;
+  const closed=bl>0.5;
+  if(closed){ blink.closedFrames++; blink.wasClosed=true; }
+  else if(blink.wasClosed){
+    if(blink.closedFrames>=2 && nowMs-blink.lastTime>200){ S.blinks++; blink.lastTime=nowMs; }
+    blink.wasClosed=false; blink.closedFrames=0;
+  }
+}
+
+/* ---------------- 手输入 ---------------- */
+const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function palmOf(lm){
+  let x=0,y=0; for(const i of [0,5,9,13,17]){ x+=lm[i].x; y+=lm[i].y; }
+  return {x:x/5, y:y/5};
+}
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+function handInput(L,dt,now){
+  let best=null,bs=-1;
+  for(const lm of L){ const d=Math.hypot(lm[0].x-lm[9].x, lm[0].y-lm[9].y); if(d>bs){bs=d;best=lm;} }
+  const size=bs;
+  S.hand.lastSeen=now; S.hand.size=size;
+  // 自适应基线：慢速跟随，用来度量"朝镜头推"
+  S.hand.base+=(size-S.hand.base)*Math.min(1,dt*0.12);
+  const ratio=size/Math.max(S.hand.base,1e-4);
+  S.tThrottle=clamp((ratio-1.05)*2.6,0,1);
+  const rate=(size-S.hand.prevSize)/Math.max(dt,1e-3); S.hand.prevSize=size;
+  if(rate>0.25) S.boostKick=Math.min(3.2,S.boostKick+(rate-0.25)*2.5);
+  // 掌心（镜像后）→ 转向
+  const p=palmOf(best);
+  const mx=clamp((0.5-p.x)*2.4,-1,1);                    // 镜像：手往右移 = 往右转
+  const my=clamp((0.5-p.y)*2.2,-1,1);
+  S.tSteer.x=Math.abs(mx)<CFG.STEER_DEAD?0:mx*CFG.STEER_GAIN;
+  S.tSteer.y=Math.abs(my)<CFG.STEER_DEAD?0:my*0.7;
+  S.hand.present=true;
+}
+
+/* ---------------- 鼠标 / 键盘 ---------------- */
+addEventListener('mousemove',e=>{
+  if(S.mode!=='mouse') return;
+  const nx=(e.clientX/innerWidth)*2-1, ny=(0.5-e.clientY/innerHeight)*2;
+  S.tSteer.x=Math.abs(nx)<CFG.STEER_DEAD?0:nx;
+  S.tSteer.y=Math.abs(ny)<CFG.STEER_DEAD?0:ny*0.6;
+});
+addEventListener('mousedown',()=>{ if(S.mode==='mouse') S.mouse.down=true; });
+addEventListener('mouseup',()=>{ S.mouse.down=false; });
+addEventListener('keydown',e=>{
+  if(e.code==='Space'&&S.mode==='mouse'){ S.mouse.down=true; e.preventDefault(); }
+  if(e.code==='KeyB'){ S.blinks++; }           // 无摄像头时模拟眨眼（调试）
+});
+addEventListener('keyup',e=>{ if(e.code==='Space') S.mouse.down=false; });
+
+/* ---------------- 声音（风） ---------------- */
+let audio=null;
+$('soundBtn').addEventListener('click',()=>{
+  if(!audio){
+    const AC=new (window.AudioContext||window.webkitAudioContext)();
+    const len=AC.sampleRate*2, buf=AC.createBuffer(1,len,AC.sampleRate);
+    const d=buf.getChannelData(0); for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    const src=AC.createBufferSource(); src.buffer=buf; src.loop=true;
+    const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500;
+    const g=AC.createGain(); g.gain.value=0;
+    src.connect(lp); lp.connect(g); g.connect(AC.destination); src.start();
+    audio={ctx:AC,gain:g,filter:lp,on:false};
+  }
+  audio.ctx.resume(); audio.on=!audio.on;
+  $('soundBtn').textContent=audio.on?'🔊':'🔇';
+});
+
+/* ---------------- 开始按钮 ---------------- */
+$('btnCam').addEventListener('click',async()=>{
+  const b=$('btnCam'); b.disabled=true; b.textContent='正在启动摄像头…';
+  try{
+    await startCamera();
+    S.mode='hand'; begin();
+    $('previewWrap').classList.remove('hide');
+    toast(mpReady?'识别已就绪，抬手入镜 ✋':'识别模型加载中，稍等几秒即可用手控制…',3200);
+  }catch(e){
+    window.__errs.push('camera: '+e);
+    toast('无法访问摄像头：'+camHint(e)+'（已切换鼠标模式）',6500);
+    S.mode='mouse'; begin();
+  }finally{ b.disabled=false; b.textContent='✋ 开启摄像头开始'; }
+});
+$('btnMouse').addEventListener('click',()=>{ S.mode='mouse'; begin(); });
+function begin(){
+  S.started=true;
+  $('startOverlay').classList.add('hide');
+  $('titleBar').style.opacity='0.25';
+  showCaption('第一幕 · 清醒 —— 黄昏与暖光',3600);
+}
+
+/* ---------------- 预览小窗 ---------------- */
+const pcv=$('preview'), pctx=pcv.getContext('2d');
+function drawPreview(now){
+  if(!S.camOn) return;
+  const w=pcv.width,h=pcv.height;
+  pctx.save(); pctx.translate(w,0); pctx.scale(-1,1);
+  pctx.drawImage(video,0,0,w,h); pctx.restore();
+  const res=lastHandRes;
+  if(res&&res.landmarks){
+    pctx.strokeStyle='rgba(255,235,210,.9)'; pctx.lineWidth=2;
+    for(const lm of res.landmarks){
+      pctx.beginPath();
+      for(const [a,b] of CONN){
+        pctx.moveTo((1-lm[a].x)*w,lm[a].y*h); pctx.lineTo((1-lm[b].x)*w,lm[b].y*h);
+      } pctx.stroke();
+      pctx.fillStyle='#ff9e7d';
+      for(const pt of lm){ pctx.beginPath(); pctx.arc((1-pt.x)*w,pt.y*h,2.5,0,7); pctx.fill(); }
+    }
+  }
+  // 眨眼指示条
+  pctx.fillStyle='rgba(255,240,220,.25)'; pctx.fillRect(8,8,60,6);
+  pctx.fillStyle='#ffd9a8'; pctx.fillRect(8,8,60*clamp(S.blinkValue||0,0,1),6);
+}
+let lastHandRes=null;
+
+/* ---------------- 主循环 ---------------- */
+let last=performance.now(), hudT=0;
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  const nowS=now/1000;
+
+  // 检测
+  if(S.camOn&&video.readyState>=2&&video.currentTime!==lastVideoTime){
+    lastVideoTime=video.currentTime;
+    if(handLM){ try{ const r=handLM.detectForVideo(video,now); lastHandRes=r; mpFailStreak=0;
+        if(r&&r.landmarks&&r.landmarks.length) handInput(r.landmarks,dt,nowS); }catch(e){
+        if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+    if(faceLM){ try{ detectBlink(faceLM.detectForVideo(video,now),now); mpFailStreak=0; }catch(e){
+        if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+  }
+  S.hand.present=S.hand.present&&(nowS-S.hand.lastSeen<CFG.HAND_LOST_GRACE);
+  if(!S.hand.present&&S.mode==='hand'){ S.tThrottle=0; S.tSteer.x=Math.sin(nowS*0.35)*0.12; S.tSteer.y=0; }
+  if(S.mode==='mouse') S.tThrottle=S.mouse.down?1:0;
+
+  // 平滑
+  const k=1-Math.exp(-dt*6);
+  S.steer.x+=(S.tSteer.x-S.steer.x)*k;
+  S.steer.y+=(S.tSteer.y-S.steer.y)*k;
+  S.throttle+=(S.tThrottle-S.throttle)*(1-Math.exp(-dt*4));
+  S.boostKick*=Math.exp(-dt*2.2);
+  S.speed=CFG.CRUISE+S.throttle*CFG.PUSH_MAX+S.boostKick;
+  S.travel+=S.speed*dt;
+
+  // 渲染
+  gl.uniform2f(U.uRes,canvas.width,canvas.height);
+  gl.uniform1f(U.uTime,nowS);
+  gl.uniform1f(U.uTravel,S.travel);
+  gl.uniform2f(U.uSteer,S.steer.x,S.steer.y);
+  gl.uniform1f(U.uBoost,clamp(S.boostKick*0.5+S.throttle*0.4,0,1));
+  gl.uniform1f(U.uFov,1.05+clamp(S.speed/4.5,0,1)*0.35);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+
+  drawPreview(now);
+
+  // HUD（5Hz）
+  hudT+=dt;
+  if(hudT>0.2){
+    hudT=0;
+    const modeTxt=S.mode==='hand'?(S.hand.present?'模式 手掌 ✋':'模式 手掌（寻找手中…）')
+                 :S.mode==='mouse'?'模式 鼠标 🖱（按住加速 · B 键模拟眨眼）':'等待开始';
+    $('status').innerHTML=modeTxt+'<br>速度 '+S.speed.toFixed(1)+' m/s';
+    $('blinkTag').textContent='眨眼 × '+S.blinks;
+    $('speedFill').style.width=clamp(S.speed/4.5*100,4,100)+'%';
+    $('boostTag').style.opacity=clamp(S.boostKick-0.7,0,0.9);
+    if(audio&&audio.on){
+      audio.gain.gain.value=0.02+clamp(S.speed/4.5,0,1)*0.09;
+      audio.filter.frequency.value=350+S.speed*260;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

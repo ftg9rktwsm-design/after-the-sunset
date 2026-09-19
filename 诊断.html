@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>追踪链路诊断 · 日落之后</title>
+<style>
+  body{font-family:-apple-system,"PingFang SC",sans-serif;background:#1a1420;color:#f3e8dc;padding:28px;max-width:860px;margin:0 auto;line-height:1.6}
+  h1{font-size:22px;letter-spacing:.15em}
+  .row{padding:10px 14px;border-radius:10px;margin:8px 0;background:rgba(255,255,255,.06);border-left:4px solid #666;white-space:pre-wrap;word-break:break-all}
+  .ok{border-color:#7dc97d}.fail{border-color:#e06c5a}.wait{border-color:#e0b05a}
+  .tag{font-weight:700;margin-right:8px}
+  button{border:none;border-radius:999px;padding:10px 22px;font-size:15px;font-weight:700;cursor:pointer;margin:6px 8px 6px 0}
+  #goCam{background:linear-gradient(135deg,#ffd9a8,#ff9e7d);color:#4a2318}
+  video{width:240px;height:180px;background:#111;border-radius:10px;transform:scaleX(-1)}
+  small{color:#c9b8a8}
+</style>
+</head>
+<body>
+<h1>追踪链路诊断（自动版）</h1>
+<div id="out"></div>
+<button id="goCam">② 授权摄像头并测试实时检测</button>
+<video id="cam" playsinline muted></video>
+
+<script>
+"use strict";
+const out=document.getElementById('out');
+const REPORT={ua:navigator.userAgent,secure:window.isSecureContext,steps:{},t:new Date().toISOString()};
+function row(name,state,detail){
+  const d=document.createElement('div');
+  d.className='row '+(state==='ok'?'ok':state==='fail'?'fail':'wait');
+  d.innerHTML='<span class="tag">'+(state==='ok'?'✅':state==='fail'?'❌':'⏳')+' '+name+'</span>'+(detail||'');
+  out.appendChild(d); return d;
+}
+function report(){ try{navigator.sendBeacon('/report',JSON.stringify(REPORT));}catch(e){} }
+addEventListener('pagehide',report); setInterval(report,3000);
+
+const MP_BASE='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const HAND_MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_MODEL='https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+row('浏览器/安全上下文','ok',navigator.userAgent+'<br>isSecureContext='+window.isSecureContext);
+
+(async()=>{
+  // 2. MediaPipe 库
+  let libRow=row('MediaPipe 库 import()','wait','加载中…');
+  let vision;
+  try{ vision=await import(MP_BASE); REPORT.steps.lib='ok'; libRow.className='row ok'; libRow.innerHTML='<span class="tag">✅ 库</span>加载成功，HandLandmarker='+(typeof vision.HandLandmarker); }
+  catch(e){ REPORT.steps.lib='fail: '+e; libRow.className='row fail'; libRow.innerHTML='<span class="tag">❌ 库</span>'+e; report(); return; }
+
+  // 3. WASM
+  let wasmRow=row('WASM FilesetResolver','wait','加载中…');
+  let fs;
+  try{ fs=await vision.FilesetResolver.forVisionTasks(MP_BASE+'/wasm'); REPORT.steps.wasm='ok'; wasmRow.className='row ok'; wasmRow.textContent='✅ WASM 加载成功'; }
+  catch(e){ REPORT.steps.wasm='fail: '+e; wasmRow.className='row fail'; wasmRow.innerHTML='<span class="tag">❌ WASM</span>'+e; report(); return; }
+
+  // 4. 手部模型（GPU→CPU）
+  let handLM=null,handRow=row('手部模型 HandLandmarker','wait','创建中…');
+  try{ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:HAND_MODEL,delegate:'GPU'},runningMode:'VIDEO',numHands:2}); REPORT.steps.hand='GPU'; handRow.innerHTML='<span class="tag">✅ 手部模型</span>GPU 委托'; }
+  catch(e1){
+    try{ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:HAND_MODEL,delegate:'CPU'},runningMode:'VIDEO',numHands:2}); REPORT.steps.hand='CPU(GPU失败:'+e1+')'; handRow.innerHTML='<span class="tag">✅ 手部模型</span>GPU 失败已回退 CPU<br><small>GPU错误: '+e1+'</small>'; }
+    catch(e2){ REPORT.steps.hand='fail GPU:'+e1+' CPU:'+e2; handRow.className='row fail'; handRow.innerHTML='<span class="tag">❌ 手部模型</span>GPU: '+e1+'<br>CPU: '+e2; }
+  }
+
+  // 5. 人脸模型（GPU→CPU）
+  let faceLM=null,faceRow=row('人脸模型 FaceLandmarker','wait','创建中…');
+  try{ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:FACE_MODEL,delegate:'GPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); REPORT.steps.face='GPU'; faceRow.innerHTML='<span class="tag">✅ 人脸模型</span>GPU 委托'; }
+  catch(e1){
+    try{ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:FACE_MODEL,delegate:'CPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); REPORT.steps.face='CPU(GPU失败:'+e1+')'; faceRow.innerHTML='<span class="tag">✅ 人脸模型</span>GPU 失败已回退 CPU<br><small>GPU错误: '+e1+'</small>'; }
+    catch(e2){ REPORT.steps.face='fail GPU:'+e1+' CPU:'+e2; faceRow.className='row fail'; faceRow.innerHTML='<span class="tag">❌ 人脸模型</span>GPU: '+e1+'<br>CPU: '+e2; }
+  }
+
+  // 6. 离线推理能力自检：把摄像头占位符换成 canvas 生成的一帧（IMAGE 模式），验证 wasm 推理本身可用
+  try{
+    const c=document.createElement('canvas');c.width=640;c.height=480;const g=c.getContext('2d');
+    g.fillStyle='#777';g.fillRect(0,0,640,480);g.fillStyle='#fff';g.beginPath();g.arc(320,240,80,0,7);g.fill();
+    const img=new Image();img.src=c.toDataURL();await img.decode();
+    const im=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:HAND_MODEL,delegate:'CPU'},runningMode:'IMAGE',numHands:1});
+    const r=im.detect(img);
+    REPORT.steps.inference=(r&&r.landmarks)?('ok landmarks='+(r.landmarks?r.landmarks.length:0)):'ok-empty';
+    row('推理自检（IMAGE 模式）','ok','detect() 执行成功，未抛异常');
+  }catch(e){ REPORT.steps.inference='fail: '+e; row('推理自检（IMAGE 模式）','fail',String(e)); }
+
+  // 6b. VIDEO 模式自检：用 canvas 录一段 2 秒合成视频并循环播放，跑 detectForVideo（无需摄像头）
+  try{
+    const c=document.createElement('canvas');c.width=320;c.height=240;const g=c.getContext('2d');
+    let t=0;
+    const draw=()=>{t+=.05;g.fillStyle='#666';g.fillRect(0,0,320,240);g.fillStyle='#eee';g.beginPath();g.arc(160+Math.sin(t)*60,120,40,0,7);g.fill();};
+    const stream=c.captureStream(15);
+    const mime=MediaRecorder.isTypeSupported('video/mp4')?'video/mp4':'';
+    const rec=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
+    const chunks=[];
+    rec.ondataavailable=e=>chunks.push(e.data);
+    const done=new Promise(res=>rec.onstop=res);
+    rec.start(100);
+    for(let i=0;i<30;i++){draw();await new Promise(r=>setTimeout(r,33));}
+    rec.stop();await done;
+    const blob=new Blob(chunks,{type:mime||'video/webm'});
+    const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.src=URL.createObjectURL(blob);
+    await v.play(); await new Promise(r=>setTimeout(r,400));
+    const vm=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:HAND_MODEL,delegate:'CPU'},runningMode:'VIDEO',numHands:1});
+    let frames=0,errs=[];
+    for(let i=0;i<20;i++){
+      if(v.readyState>=2&&v.currentTime!==-1){ try{ vm.detectForVideo(v,performance.now()+i); frames++; }catch(e){ if(errs.length<2)errs.push(String(e&&e.message||e)); } }
+      await new Promise(r=>requestAnimationFrame(r));
+    }
+    if(errs.length){ REPORT.steps.videoMode='fail: '+errs.join('|'); row('推理自检（VIDEO 模式）','fail',errs.join(' | ')); }
+    else{ REPORT.steps.videoMode='ok '+frames+' 帧'; row('推理自检（VIDEO 模式）','ok','detectForVideo 跑了 '+frames+' 帧，无异常'); }
+  }catch(e){ REPORT.steps.videoMode='fail: '+e; row('推理自检（VIDEO 模式）','fail',String(e)); }
+  report();
+})();
+
+// 7. 摄像头 + 实时检测（需用户手势）
+document.getElementById('goCam').addEventListener('click',async()=>{
+  const video=document.getElementById('cam');
+  let camRow=row('摄像头 getUserMedia','wait','请求中…');
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
+    video.srcObject=stream; await video.play();
+    REPORT.steps.camera='ok '+video.videoWidth+'x'+video.videoHeight+' rs='+video.readyState;
+    camRow.className='row ok';
+    camRow.innerHTML='<span class="tag">✅ 摄像头</span>已授权并出画 '+video.videoWidth+'×'+video.videoHeight+'，readyState='+video.readyState;
+  }catch(e){
+    REPORT.steps.camera='fail '+e.name+': '+e.message;
+    camRow.className='row fail';
+    camRow.innerHTML='<span class="tag">❌ 摄像头</span>'+e.name+': '+e.message
+      +'<br><small>→ 若是 NotAllowedError：系统设置 → 隐私与安全性 → 摄像头，确认 Safari 已开；且 Safari 设置 → 网站 → 摄像头里 localhost 为「允许」</small>';
+    report(); return;
+  }
+  const vision=await import(MP_BASE);
+  const fs=await vision.FilesetResolver.forVisionTasks(MP_BASE+'/wasm');
+  let handLM=null,faceLM=null;
+  try{ handLM=await vision.HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:HAND_MODEL,delegate:'CPU'},runningMode:'VIDEO',numHands:2}); }catch(e){}
+  try{ faceLM=await vision.FaceLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:FACE_MODEL,delegate:'CPU'},runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true}); }catch(e){}
+  const liveRow=row('实时检测（对镜头伸手 3 秒）','wait','运行中…');
+  await new Promise(r=>setTimeout(r,800));
+  let handFrames=0,faceFrames=0,errs=[],tried=0,lastVT=-1;
+  const t0=performance.now();
+  while(performance.now()-t0<3000){
+    if(video.readyState>=2&&video.currentTime!==lastVT){
+      lastVT=video.currentTime; tried++;
+      try{
+        if(handLM){const r=handLM.detectForVideo(video,performance.now()); if(r&&r.landmarks&&r.landmarks.length)handFrames++;}
+        if(faceLM){const r=faceLM.detectForVideo(video,performance.now()); if(r&&r.faceBlendshapes&&r.faceBlendshapes.length)faceFrames++;}
+      }catch(e){ if(errs.length<3)errs.push(String(e&&e.message||e)); }
+    }
+    await new Promise(r=>requestAnimationFrame(r));
+  }
+  REPORT.steps.live={tried,handFrames,faceFrames,errs};
+  liveRow.className='row '+(errs.length?'fail':(tried&&handFrames+faceFrames>0)?'ok':'wait');
+  liveRow.innerHTML='<span class="tag">'+(errs.length?'❌':(handFrames+faceFrames>0)?'✅':'⚠️')+' 实时检测</span>'
+    +'跑了 '+tried+' 帧：检出人手 '+handFrames+' 帧、人脸 '+faceFrames+' 帧'
+    +(errs.length?'<br>检测报错: '+errs.join(' | '):'')
+    +((!errs&&handFrames===0)?'<br><small>若一直为 0：请正对镜头伸出手掌（光线充足）</small>':'');
+  report();
+});
+</script>
+</body>
+</html>
