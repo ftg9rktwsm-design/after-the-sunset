@@ -187,7 +187,11 @@ const CFG={
   DELAY_MAX:0.45,      // 困意满时的输入延迟（秒）
   BGM_VOL:0.5,         // 背景音乐初始音量
 };
-const MODEL_URL=encodeURI((location.pathname.replace(/[^/]*$/,'').includes('/act1/')?'/act1/models/':'/models/')+'已加速- Wind Turbine Farm.glb');
+/* 模型地址：GitHub Pages 上走 media 直链（LFS 真身，带 CORS）；本地/其他环境用相对路径 */
+const GLB_NAME='已加速- Wind Turbine Farm.glb';
+const MODEL_URL=location.hostname.endsWith('github.io')
+ ?'https://media.githubusercontent.com/media/ftg9rktwsm-design/after-the-sunset/main/models/'+encodeURIComponent(GLB_NAME)
+ :encodeURI((location.pathname.replace(/[^/]*$/,'').includes('/act1/')?'/act1/models/':'/models/')+GLB_NAME);
 /* ======================================================================= */
 
 /* ---------------- 渲染器 / 场景 ---------------- */
