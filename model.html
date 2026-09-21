@@ -72,6 +72,14 @@
   #soundBtn{position:fixed;right:18px;top:18px;z-index:20;width:42px;height:42px;border-radius:50%;
     border:1px solid rgba(255,240,220,.35);background:rgba(30,18,30,.35);color:#fff3e2;
     font-size:17px;cursor:pointer}
+  #mpChip{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:999px;
+    background:rgba(30,18,30,.4);border:1px solid rgba(255,240,220,.22);
+    color:#e8dcc8;font-size:11.5px;letter-spacing:.08em}
+  #mpChip.warn{color:#ffcf9e;border-color:rgba(255,180,120,.5)}
+  #retryCam{position:fixed;right:18px;top:70px;z-index:20;padding:7px 14px;border-radius:999px;
+    border:1px solid rgba(255,240,220,.35);background:rgba(30,18,30,.45);color:#ffe9cf;
+    font-size:13px;letter-spacing:.06em;cursor:pointer;transition:opacity .4s}
+  #retryCam.hide{opacity:0;pointer-events:none}
   #boostTag{position:fixed;left:50%;bottom:12%;transform:translateX(-50%);z-index:15;
     font-size:22px;font-weight:800;letter-spacing:.5em;text-indent:.5em;color:#fff0d8;
     text-shadow:0 0 18px rgba(255,170,110,.8);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -145,9 +153,11 @@
   <div id="blinkTag">眨眼 × 0</div>
   <div id="speedWrap"><div id="speedFill"></div></div>
   <div id="drowWrap" title="困意"><div id="drowFill"></div></div>
+  <div id="mpChip">识别：加载中…</div>
 </div>
 
 <button id="soundBtn" title="音乐开关">🔊</button>
+<button id="retryCam" class="hide" title="重新尝试开启摄像头">🤚 改用手势模式</button>
 <div id="boostTag">跑 ——</div>
 <div id="caption"></div>
 <div id="wrapFade"></div>
@@ -421,12 +431,13 @@ async function initModels(attempt){
     let lastErr=null;
     for(const src of MP_SOURCES){ try{ const vision=await import(src.lib); await buildLM(vision,src); lastErr=null; break; }catch(e){ lastErr=e; } }
     if(lastErr) throw lastErr;
-    mpReady=true; mpFailStreak=0;
+    mpReady=true; mpFailStreak=0; mpChip('就绪 ✋');
     if(S.started) toast('手势与眨眼识别已就绪 ✋');
   }catch(e){
     window.__errs.push('mp: '+e);
     if(attempt<2){ if(S.started) toast('识别模型加载失败，正在重试…',2500); mpLoading=false; setTimeout(()=>initModels(attempt+1),2500*(attempt+1)); return; }
     if(S.started) toast('识别模型加载失败：请检查网络后刷新页面',4200);
+    mpChip('加载失败，请刷新或检查网络',true);
   }
   mpLoading=false;
 }
@@ -439,9 +450,24 @@ function camHint(e){
 }
 initModels();
 
+function mpChip(t,warn){ const c=$('mpChip'); c.textContent='识别：'+t; c.classList.toggle('warn',!!warn); }
+function waitFrames(v,ms){   // 等首帧但设上限：WebKit 偶发 play() 悬起、画面迟迟不达，不能卡死开始流程
+  return new Promise(res=>{
+    if(v.readyState>=2) return res(true);
+    const to=setTimeout(()=>{v.removeEventListener('loadeddata',done);res(false);},ms);
+    function done(){clearTimeout(to);res(true);}
+    v.addEventListener('loadeddata',done,{once:true});
+  });
+}
 async function startCamera(){
   const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
-  video.srcObject=stream; await video.play(); S.camOn=true;
+  video.srcObject=stream;
+  try{await Promise.race([video.play(),new Promise(r=>setTimeout(r,2500))]);}catch(e){}
+  S.camOn=true;   // 流接上即算开启：识别循环自带 readyState 守卫，画面到达后自动开始识别
+  waitFrames(video,8000).then(ok=>{
+    if(ok){ if(S.mode==='hand'){ mpChip(mpReady?'运行中':'识别模型加载中…'); toast('摄像头画面已就绪 ✋',2000);} }
+    else{ mpChip('等待摄像头画面…',true); toast('摄像头画面迟迟未就绪：手势与眨眼会在画面到达后自动生效',4200); }
+  });
 }
 const blink={closedFrames:0,wasClosed:false,lastTime:-1e9};
 function detectBlink(res,nowMs){
@@ -842,16 +868,26 @@ function journeyFrame(dt){
 /* ---------------- 开始 ---------------- */
 $('btnCam').addEventListener('click',async()=>{
   const b=$('btnCam'); b.disabled=true; b.textContent='正在启动摄像头…';
-  try{
-    await startCamera(); S.mode='hand'; begin();
-    $('previewWrap').classList.remove('hide');
-    toast(mpReady?'识别已就绪，抬手入镜 ✋':'识别模型加载中，稍等几秒…',3200);
-  }catch(e){
-    window.__errs.push('cam: '+e);
-    toast('无法访问摄像头：'+camHint(e)+'（已切换鼠标模式）',6500); S.mode='mouse'; begin();
-  }finally{ b.disabled=false; b.textContent='✋ 开启摄像头开始'; }
+  let camErr=null;
+  try{ await startCamera(); }catch(e){ camErr=e; window.__errs.push('cam: '+e); }
+  b.disabled=false; b.textContent='✋ 开启摄像头开始';
+  if(camErr){   // 只有取摄像头本身失败才降级鼠标模式；begin/startBGM 的错误不再被误判成摄像头问题
+    toast('无法访问摄像头：'+camHint(camErr)+'（已切换鼠标模式）',6500);
+    S.mode='mouse'; begin(); mpChip('摄像头未开启',true);
+    $('retryCam').classList.remove('hide');
+    return;
+  }
+  S.mode='hand'; begin();
+  $('previewWrap').classList.remove('hide');
+  toast(mpReady?'识别已就绪，抬手入镜 ✋':'识别模型加载中，稍等几秒…',3200);
 });
-$('btnMouse').addEventListener('click',()=>{ S.mode='mouse'; begin(); });
+$('btnMouse').addEventListener('click',()=>{ S.mode='mouse'; begin(); mpChip('摄像头未开启 · 鼠标模式',true); });
+$('retryCam').addEventListener('click',async()=>{
+  try{ await startCamera(); }catch(e){ toast('仍无法访问摄像头：'+camHint(e),5200); return; }
+  $('previewWrap').classList.remove('hide');
+  $('retryCam').classList.add('hide');
+  if(S.started&&S.mode==='mouse'){ S.mode='hand'; mpChip(mpReady?'运行中':'识别模型加载中…'); toast('已切回手势模式 ✋',2600); }
+});
 function begin(){
   S.started=true;
   $('startOverlay').classList.add('hide');
@@ -898,9 +934,9 @@ function frame(now){
     lastVideoTime=video.currentTime;
     if(handLM){ try{ const r=handLM.detectForVideo(video,mpNow()); lastHandRes=r; mpFailStreak=0;
       if(r&&r.landmarks&&r.landmarks.length&&!S.dream) handInput(r.landmarks,dt,nowS); }catch(e){
-      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); mpChip('识别出错，建议刷新',true); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
     if(faceLM){ try{ detectBlink(faceLM.detectForVideo(video,mpNow()),now); mpFailStreak=0; }catch(e){
-      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
+      if(++mpFailStreak===30){ window.__errs.push('detect: '+e); mpChip('识别出错，建议刷新',true); toast('识别连续出错：'+((e&&e.message)||e)+'——建议刷新页面',5200); } } }
     // 统一追踪：第一幕是唯一识别源，入梦期间把结果实时推进梦境层
     if(S.dream){ try{const w=$('dreamFrame').contentWindow;if(w&&w.__dreamInput)w.__dreamInput(lastHandRes,S.blinkValue,performance.now());}catch(e){} }
   }
