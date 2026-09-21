@@ -741,7 +741,7 @@ function chime(freq,dur,vol,type){
 }
 const gates=[];
 function spawnGatePair(z){
- for(const [i,side] of[[-1,0],[1,1]]){
+ for(const [i,side] of[[0,-1],[1,1]]){
   const def=GATE_DEFS[i];
   const g=new THREE.Mesh(new THREE.TorusGeometry(26,1.1,8,42),
    new THREE.MeshBasicMaterial({color:def.c,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false}));
