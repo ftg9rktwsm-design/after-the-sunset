@@ -724,7 +724,7 @@ function stopBGM(){  // 入梦：1.5 秒淡到无声后停止
 }
 
 /* ---------------- 日落之前：太阳进度 / 岔路 / 小事件 / 里程碑 ---------------- */
-const JOURNEY={total:0,sunP:0,nextGate:900,km:0,evT:42,ev:null,flavorT:0,flavorC:new THREE.Color(0xe8c07a),lastCamZ:CFG.START,brakeT:0};
+const JOURNEY={total:0,sunP:0,nextGate:900,km:0,evT:65,ev:null,flavorT:0,flavorC:new THREE.Color(0xe8c07a),lastCamZ:CFG.START,brakeT:0};
 const FOG_BASE=new THREE.Color().copy(scene.fog.color);
 const DUSK=new THREE.Color(0x54638c);
 const VERSES=['风把影子拉得很长','远处的风车在替我数步子','这是今天最后一段上坡','麦田替我记住了这段路','太阳也在慢慢走','风穿过叶片，唱了一下'];
@@ -741,16 +741,16 @@ function chime(freq,dur,vol,type){
 }
 const gates=[];
 function spawnGatePair(z){
- for(const side of[-1,1]){
-  const def=GATE_DEFS[Math.random()<.5?0:1];
+ for(const [i,side] of[[-1,0],[1,1]]){
+  const def=GATE_DEFS[i];
   const g=new THREE.Mesh(new THREE.TorusGeometry(26,1.1,8,42),
-   new THREE.MeshBasicMaterial({color:def.c,transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false}));
+   new THREE.MeshBasicMaterial({color:def.c,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false}));
   g.position.set(CFG.PATH_X+side*70,26,z);
   g.userData={flavor:new THREE.Color(def.c),name:def.name};
   scene.add(g);gates.push(g);
  }
 }
-spawnGatePair(CFG.START+700);spawnGatePair(CFG.START+1300);spawnGatePair(CFG.START+2100);spawnGatePair(CFG.START+3000);
+spawnGatePair(CFG.START+900);spawnGatePair(CFG.START+2400);
 /* 远处灯塔：晚风里唯一的建筑 */
 const lh=new THREE.Group();
 lh.add(new THREE.Mesh(new THREE.CylinderGeometry(14,26,170,10),new THREE.MeshBasicMaterial({color:0x1d2735})));
@@ -807,7 +807,7 @@ function journeyFrame(dt){
   const g=gates[i];
   if(g.position.z<camZ-80){
    scene.remove(g);g.geometry.dispose();g.material.dispose();gates.splice(i,1);
-   spawnGatePair(camZ+900+Math.random()*450);
+   spawnGatePair(camZ+1500+Math.random()*600);
   }
  }
  for(const g of gates){
@@ -831,7 +831,7 @@ function journeyFrame(dt){
  /* 小事件调度 */
  if(!JOURNEY.ev&&JOURNEY.total>1200){
   JOURNEY.evT-=dt;
-  if(JOURNEY.evT<=0){Math.random()<.5?spawnTrain():spawnDeer();JOURNEY.evT=45+Math.random()*35;}
+  if(JOURNEY.evT<=0){Math.random()<.5?spawnTrain():spawnDeer();JOURNEY.evT=68+Math.random()*40;}
  }
  if(JOURNEY.ev){
   const e=JOURNEY.ev;e.g.position.x+=e.speed*dt;
