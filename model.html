@@ -143,7 +143,7 @@
     <button class="bigBtn" id="btnCam" disabled>✋ 开启摄像头开始</button>
     <button class="bigBtn" id="btnMouse" disabled>🖱 无摄像头 · 鼠标模式</button>
   </div>
-  <div class="tiny">摄像头画面只在本地处理，不上传任何数据 · 模型 157MB 走本地加载，几秒钟</div>
+  <div class="tiny">摄像头画面只在本地处理，不上传任何数据 · 首次加载模型约157MB（有进度提示），之后本地缓存秒开</div>
 </div>
 
 <div id="previewWrap" class="hide"><canvas id="preview" width="320" height="240"></canvas></div>
@@ -310,7 +310,50 @@ let fins=null;           // 原始叶片节点
 const rotors=[];         // 农场里所有会转的叶片（含克隆）
 const V={prog:0};        // 困意的视觉平滑值（慢于真实值，保证合眼特效顺畅）
 const loadLine=$('loadLine');
-new GLTFLoader().load(MODEL_URL, gltf=>{
+/* ---- 模型持久缓存：LFS 服务器慢且浏览器缓存仅 5 分钟，首次联网下载后存 IndexedDB，之后本地秒载 ---- */
+const GLB_CACHE_KEY='glb:wtfarm:v1';   // 模型文件更新时递增版本号
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('ats-cache',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('files');
+    rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error);
+  });
+}
+async function idbGet(key){
+  const db=await idbOpen();
+  return new Promise((res,rej)=>{
+    const rq=db.transaction('files').objectStore('files').get(key);
+    rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error);
+  });
+}
+async function idbPut(key,blob){
+  const db=await idbOpen();
+  return new Promise((res,rej)=>{
+    const rq=db.transaction('files','readwrite').objectStore('files').put(blob,key);
+    rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error);
+  });
+}
+async function idbDel(key){
+  const db=await idbOpen();
+  return new Promise((res,rej)=>{
+    const rq=db.transaction('files','readwrite').objectStore('files').delete(key);
+    rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error);
+  });
+}
+const setProg=(got,total)=>{ loadLine.textContent= total>0?`正在加载模型 ${Math.round(got/total*100)}% …`:`已加载 ${(got/1048576).toFixed(0)}MB …`; };
+async function fetchAndCache(url){   // 流式下载（自带进度）→ 存缓存 → 返回本地 blob 地址
+  const resp=await fetch(url); if(!resp.ok) throw new Error('HTTP '+resp.status);
+  const total=+resp.headers.get('content-length')||0;
+  const reader=resp.body.getReader(); const chunks=[]; let got=0;
+  for(;;){ const {done,value}=await reader.read(); if(done)break;
+    chunks.push(value); got+=value.length; setProg(got,total); }
+  const blob=new Blob(chunks);
+  idbPut(GLB_CACHE_KEY,blob).catch(()=>{});   // 缓存写失败不影响本次游玩
+  return URL.createObjectURL(blob);
+}
+function startLoad(url){
+  new GLTFLoader().load(url, gltf=>{
+    try{URL.revokeObjectURL(url);}catch(e){}
   // 模型自带的"体积雾"大盒子会糊死视野，隐藏之——雾由场景 Fog 负责
   const fogNode=gltf.scene.getObjectByName('Fog'); if(fogNode) fogNode.visible=false;
   let turbine=null;
@@ -378,10 +421,26 @@ new GLTFLoader().load(MODEL_URL, gltf=>{
   S.ready=true;
   loadLine.textContent='模型就绪 ✦ 选择一种方式开始';
   $('btnCam').disabled=false; $('btnMouse').disabled=false;
-}, ev=>{
-  if(ev.lengthComputable) loadLine.textContent=`正在加载模型 ${Math.round(ev.loaded/ev.total*100)}% …`;
-  else loadLine.textContent=`已加载 ${(ev.loaded/1048576).toFixed(0)}MB …`;
-}, err=>{ window.__errs.push('load: '+err); fatal('模型加载失败：'+err); });
+  }, ev=>{
+    if(ev.lengthComputable) setProg(ev.loaded,ev.total); else setProg(ev.loaded,0);
+  }, err=>{
+    window.__errs.push('load: '+err);
+    if(url.startsWith('blob:')){   // 缓存内容异常：清掉重新联网下载
+      idbDel(GLB_CACHE_KEY).catch(()=>{});
+      loadLine.textContent='本地缓存异常，正在重新下载模型…';
+      fetchAndCache(MODEL_URL).then(startLoad).catch(e2=>{ window.__errs.push('load: '+e2); fatal('模型加载失败：'+e2); });
+      return;
+    }
+    fatal('模型加载失败：'+err);
+  });
+}
+(async()=>{
+  let src=null;
+  try{ const cached=await idbGet(GLB_CACHE_KEY); if(cached){ loadLine.textContent='正在从本地缓存载入模型…'; src=URL.createObjectURL(cached); } }catch(e){}
+  if(src) return startLoad(src);
+  try{ startLoad(await fetchAndCache(MODEL_URL)); }
+  catch(err){ window.__errs.push('load: '+err); fatal('模型加载失败：'+err); }
+})();
 
 /* ---------------- 状态 ---------------- */
 const S={
